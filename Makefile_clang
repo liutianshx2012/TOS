@@ -1,0 +1,206 @@
+include function.mk
+
+
+EMPTY	:=
+SPACE	:= $(EMPTY) $(EMPTY)
+SLASH	:= /
+
+V       := @
+
+
+# try to infer the correct QEMU
+ifndef QEMU
+QEMU := $(shell if which qemu-system-i386 > /dev/null; \
+	then echo 'qemu-system-i386'; exit; \
+	elif which i386-elf-qemu > /dev/null; \
+	then echo 'i386-elf-qemu'; exit; \
+	elif which qemu > /dev/null; \
+	then echo 'qemu'; exit; \
+	else \
+	echo "***" 1>&2; \
+	echo "*** Error: Couldn't find a working QEMU executable." 1>&2; \
+	echo "*** Is the directory containing the qemu binary in your PATH" 1>&2; \
+	echo "***" 1>&2; exit 1; fi)
+endif
+
+# eliminate default suffix rules
+.SUFFIXES: .c .S .h
+
+# delete target files if there is an error (or make is interrupted)
+.DELETE_ON_ERROR:
+
+# define compiler and flags
+# llvm/clang3.5+
+TOOL_CHAIN := /usr/local/tos-toolchain
+HOSTCC		:= clang
+HOSTCFLAGS	:= -g -Wall -O2
+
+
+ARGS_CC_WARN          :=  -Wall #-Werror
+ARGS_CC_STD           := -std=c99
+ARGS_CC_GGDB          := -ggdb
+ARGS_CC_CONST         := -D
+ARGS_CC_INC           := -I $(DIR_INC)
+ARGS_CC_OPTIM         := -Os
+ARGS_CC_MISC          := -fno-strict-aliasing -nostdlib -nostdinc -fno-builtin -fblocks
+ARGS_CC_PROFILE       := -finstrument-functions
+ARGS_CC_PIC           := -fPIC
+ARGS_CC_TARGET_i386   := -march=i386 -target i386-elf-freebsd
+
+CC		:= $(TOOL_CHAIN)/llvm/bin/clang
+CFLAGS	:=  $(ARGS_CC_GGDB) $(ARGS_CC_TARGET_i386)  $(ARGS_CC_STD) $(ARGS_CC_MISC) $(ARGS_CC_WARN) 
+CTYPE	:= c S
+
+LD      := $(TOOL_CHAIN)/binutils/i386-elf-freebsd/bin/ld
+LDFLAGS	:= -m elf_i386
+LDFLAGS	+= -nostdlib
+
+OBJCOPY := $(TOOL_CHAIN)/binutils/i386-elf-freebsd/bin/objcopy
+OBJDUMP := $(TOOL_CHAIN)/binutils/i386-elf-freebsd/bin/objdump
+
+COPY	:= cp
+MKDIR   := mkdir -p
+MV		:= mv
+RM		:= rm -f
+AWK		:= awk
+SED		:= sed
+SH		:= sh
+TR		:= tr
+TOUCH	:= touch -c
+
+OBJDIR	:= obj
+BINDIR	:= bin
+
+ALLOBJS	:=
+ALLDEPS	:=
+TARGETS	:=
+
+
+listf_cc = $(call listf,$(1),$(CTYPE))
+
+# for cc
+add_files_cc = $(call add_files,$(1),$(CC),$(CFLAGS) $(3),$(2),$(4))
+create_target_cc = $(call create_target,$(1),$(2),$(3),$(CC),$(CFLAGS))
+
+# for hostcc
+add_files_host = $(call add_files,$(1),$(HOSTCC),$(HOSTCFLAGS),$(2),$(3))
+create_target_host = $(call create_target,$(1),$(2),$(3),$(HOSTCC),$(HOSTCFLAGS))
+
+cgtype = $(patsubst %.$(2),%.$(3),$(1))
+objfile = $(call toobj,$(1))
+asmfile = $(call cgtype,$(call toobj,$(1)),o,asm)
+outfile = $(call cgtype,$(call toobj,$(1)),o,out)
+symfile = $(call cgtype,$(call toobj,$(1)),o,sym)
+
+# for match pattern
+match = $(shell echo $(2) | $(AWK) '{for(i=1;i<=NF;i++){if(match("$(1)","^"$$(i)"$$")){exit 1;}}}'; echo $$?)
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# include kernel/user
+
+INCLUDE	+= libs/
+
+CFLAGS	+= $(addprefix -I,$(INCLUDE))
+
+LIBDIR	+= libs
+
+$(call add_files_cc,$(call listf_cc,$(LIBDIR)),libs,)
+
+# -------------------------------------------------------------------
+# kernel
+
+KINCLUDE	+= kern/debug/ \
+			   kern/driver/ \
+			   kern/trap/ \
+			   kern/mm/
+
+KSRCDIR		+= kern/init \
+			   kern/libs \
+			   kern/debug \
+			   kern/driver \
+			   kern/trap \
+			   kern/mm
+
+KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
+
+$(call add_files_cc,$(call listf_cc,$(KSRCDIR)),kernel,$(KCFLAGS))
+
+KOBJS	= $(call read_packet,kernel libs)
+
+# create kernel target
+kernel = $(call totarget,kernel)
+
+$(kernel): tools/kernel.ld
+
+$(kernel): $(KOBJS)
+	@echo + ld $@
+	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS)
+	@$(OBJDUMP) -S $@ > $(call asmfile,kernel)
+	@$(OBJDUMP) -t $@ | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,kernel)
+
+$(call create_target,kernel)
+
+# -------------------------------------------------------------------
+
+# create bootblock
+bootfiles = $(call listf_cc,boot)
+$(foreach f,$(bootfiles),$(call cc_compile,$(f),$(CC),$(CFLAGS) -Os -nostdinc))
+
+bootblock = $(call totarget,bootblock)
+
+$(bootblock): $(call toobj,$(bootfiles)) | $(call totarget,sign)
+	@echo + ld $@
+	$(V)$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 $^ -o $(call toobj,bootblock)
+	@$(OBJDUMP) -S $(call objfile,bootblock) > $(call asmfile,bootblock)
+	@$(OBJDUMP) -t $(call objfile,bootblock) | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,bootblock)
+	@$(OBJCOPY) -S -O binary $(call objfile,bootblock) $(call outfile,bootblock)
+	@$(call totarget,sign) $(call outfile,bootblock) $(bootblock)
+
+$(call create_target,bootblock)
+
+# -------------------------------------------------------------------
+
+# create 'sign' tools
+$(call add_files_host,tools/sign.c,sign,sign)
+$(call create_target_host,sign,sign)
+
+# -------------------------------------------------------------------
+
+# create tos.img
+TOSIMG	:= $(call totarget,tos.img)
+	
+$(TOSIMG): $(kernel) $(bootblock)
+	$(V)dd if=/dev/zero of=$@ count=10000
+	$(V)dd if=$(bootblock) of=$@ conv=notrunc
+	$(V)dd if=$(kernel) of=$@ seek=1 conv=notrunc
+	
+$(call create_target,tos.img)
+	
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+$(call finish_all)
+
+# files for script
+
+TARGETS: $(TARGETS)
+all: $(TARGETS)
+.DEFAULT_GOAL := TARGETS
+
+.PHONY: qemu debug
+
+qemu: $(TOSIMG)
+	$(V)$(QEMU) -no-reboot -parallel stdio -hda $< -serial null
+
+TERMINAL:= gnome-terminal
+debug: $(TOSIMG)
+	$(V)$(QEMU) -S -s -parallel stdio -hda $< -serial null &
+	$(V)sleep 200 #2
+	# linux
+	#$(V)$(TERMINAL) -e "gdb -q -tui -x tools/gdbinit"
+	#macosx
+	# "i386-elf-gdb -q -tui -x tools/gdbinit"
+
+.PHONY: clean
+clean:
+	-$(RM) -r $(OBJDIR) $(BINDIR)
+

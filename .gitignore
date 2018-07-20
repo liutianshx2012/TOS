@@ -1,52 +1,25 @@
-# Prerequisites
-*.d
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
+*~
+obj/
+bin/
+.gdb.in
+.qemu.out
+cscope.*
+ncscope.*
+tags
+*swp
+.cproject
+.project
+*.bak
+*.org
+.codelite
+*.project
+*.workspace
+a.out
+*.log
 *.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+ttctesting
+disk0
+*.orig
+.vscode
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf

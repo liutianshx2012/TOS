@@ -1,2 +1,2 @@
 # TOS
-a toy OS
+#boot

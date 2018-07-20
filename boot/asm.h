@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 10时40分39秒
  ************************************************************************/
-#ifndef _ASM_H
-#define _ASM_H
+#ifndef _BOOT_ASM_H
+#define _BOOT_ASM_H
 
 /* Assembler macros to create x86 segments */
 
