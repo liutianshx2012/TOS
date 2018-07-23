@@ -8,7 +8,7 @@
 #include <x86.h>
 #include <picirq.h>
 
-/* 	实现了对中断控制器8259A的初始化和使能操作 */
+/* 	实现了对中断控制器 8259A 的初始化和使能操作 */
 
 // I/O Addresses of the two programmable interrupt controllers
 #define IO_PIC1             0x20    // Master (IRQs 0-7)

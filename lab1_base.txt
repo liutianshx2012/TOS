@@ -193,7 +193,7 @@ Content
 
                         这 6 种描述符类型可分为两大类 
                             系统段描述符  &  门描述符
-                            系统段描述符指向系统段（如LDT 和TSS段）.
+                            系统段描述符指向系统段(如LDT 和TSS段).
                             门描述符就是一个“门”,对于调用、中断、陷阱门,其中含有代码段的段选择子和处理函数的入口地址(为相应的idt数组内容);
                             对于任务门,其中含有 TSS 的段选择符.
 
@@ -600,23 +600,23 @@ Content
         1 ===> CPL(Current Priviliege Level):它代表了当前代码段的特权等级,由 CS 和 SS的第 0 
                 位 和第 1 位表示.
                 当程序转移到不同的特权等级的代码时处理器将改变CPL.
-                在遇到一致代码段时,一致代码可以被相同或者更低特权等级（用户程序）的代码访问.
+                在遇到一致代码段时,一致代码可以被相同或者更低特权等级(用户程序)的代码访问.
                 当处理器访问一个与 CPL 特权等级不同的一致代码段时,CPL不会被改变.
         
-        2 ===> DPL（Descriptor Priviliege Level):表示段或者门的特权等级,它存储在段或者门描述符的
+        2 ===> DPL(Descriptor Priviliege Level):表示段或者门的特权等级,它存储在段或者门描述符的
                 DPL字段中.
                 每当当前代码段试图访问一个段或者门时, DPL 将会和 CPL 以及 RPL 作比较,根据段或者门
                 类型的不同, DPL 将会被区别对待: 
                 
                 数据段: DPL 规定了可以访问此段的最低特权等级. 
                 
-                非一致代码段（不使用调用门的情况下）: DPL 规定了访问此段的特权级;调用门:与数据段一致.
+                非一致代码段(不使用调用门的情况下): DPL 规定了访问此段的特权级;调用门:与数据段一致.
                 
                 一致代码段和通过调用门访问的非一致代码段: DPL 规定了访问此段的最高特权等级. 
                 
                 TSS:与数据段一致.
 
-        3 ===> RPL（Requested Priviliege Level):RPL是通过选择子的第0位和第1位来表示的.处理器通过
+        3 ===> RPL(Requested Priviliege Level):RPL是通过选择子的第0位和第1位来表示的.处理器通过
                 检查RPL和CPL来确认一个访问请求是否合法.即使提出请求的段有足够的特权级,如果RPL不够也是
                 不行的.也就是说,如果RPL的数字比CPL大,那么RPL将会起决定作用,反之亦然. 
 
@@ -659,3 +659,63 @@ Content
 门描述符结构 https://blog.csdn.net/liutianshx2012/article/details/52525522
 
 任务门用于任务切换; 陷阱门和中断门是调用门的特殊类,专门用于调用异常和中断的处理程序.
+
+
+
+/*********************************************************************************/
+
+inline assemble
+
+在内联汇编中，操作数通常用数字来引用，具体的编号规则为:若命令共涉及n个操作数，则第1个输出操作
+数(the first output operand)被编号为0，第2个output operand编号为1，依次类推，最后1个
+输入操作数(the last input operand)则被编号为n-1.
+
+
+具体到下面的示例代码中，根据上下文，涉及到2个操作数变量a、b，这段汇编代码的作用是将a的值赋给b，可见，a是input operand，而b是output operand，那么根据操作数的引用规则，不难推出，a应该用%1来引用，b应该用%0来引用.
+
+
+output operands 该字段为可选项，用以指明输出操作数，典型的格式为:
+           : "=a" (out_var)
+其中，"=a"指定output operand的应遵守的约束(constraint)，out_var为存放指令结果的变量，通常是个C语言变量.
+
+
+clobbered registers 该字段为可选项，用于列出指令中涉及到的且没出现在output operands字段及input operands字段的那些寄存器.若寄存器被列入clobber-list，则等于是告诉gcc，这些寄存器可能会被内联汇编命令改写.因此，执行内联汇编的过程中，这些寄存器就不会被gcc分配给其它进程或命令使用.
+
+1==>寄存器操作数约束(register operand constraint, r)当操作数被指定为这类约束时，表明汇编指令执行时，操作数被将存储在指定的通用寄存器(General Purpose Registers, GPR)中.例如: 
+           asm ("movl %%eax, %0\n" : "=r"(out_val));
+
+2==>内存操作数约束(Memory operand constraint, m)当我们不想通过寄存器中转，而是直接操作内存时，可以用"m"来约束.例如:
+            asm volatile ( "lock; decl %0" : "=m" (counter) : "m" (counter));
+
+3==>关联约束(matching constraint)在有些情况下，如果命令的输入、输出均为同一个变量，则可
+以在内联汇编中指定以matching constraint方式分配寄存器，此时，input operand和output 
+operand共用同一个“中转”寄存器.例如:
+           asm ("incl %0" :"=a"(var):"0"(var));
+该指令对变量var执行incl操作，由于输入、输出均为同一变量，因此可用"0"来指定都用%eax作为中转寄存器.注意"0"约束修饰的是input operands.
+
+4==>其它约束,除上面介绍的3中常用约束外，还有一些其它的约束参数(如"o"、"V"、"i"、"g"等)
+
+
+static void
+print_inline_asm(void)
+{
+    int a = 10, b;
+    __asm__ volatile (
+        "movl %1, %%eax;" 
+        "movl %%eax, %0;"
+        :"=r"(b)        /* output */
+        :"r"(a)         /* input */
+        :"%eax"         /* clobbered register */
+    );
+    cprintf("b=%d\n", b);
+
+    int foo = 10, bar = 15;
+    __asm__ volatile(
+        "addl  %%ebx,%%eax"
+        :"=a"(foo)
+        :"a"(foo), "b"(bar)
+    );
+    cprintf("foo+bar=%d\n", foo);
+}
+
+/*********************************************************************************/

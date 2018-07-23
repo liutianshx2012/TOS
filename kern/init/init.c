@@ -48,6 +48,7 @@ kern_init(void)
     while(1);
 }
 
+
 static void
 print_cur_status(void)
 {
