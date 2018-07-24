@@ -75,12 +75,12 @@ idt_init(void)
         SETGATE(idt[i],0,G_D_K_TEXT, __vectors[i],DPL_KERNEL);
     }
     /* SET for switch from user to kernel*/
-    SETGATE(idt[USER_SWITCH_2_KERNEL],0,G_D_K_TEXT, __vectors[USER_SWITCH_2_KERNEL], DPL_KERNEL);
+    SETGATE(idt[USER_SWITCH_2_KERNEL], 0, KERNEL_CS, __vectors
+                              [USER_SWITCH_2_KERNEL], DPL_USER);
+
     /*load the IDT ==> 使用 LIDT 指令加载 IDT 中断描述符表*/
     lidt(&idt_pd);
 }
-
-
 
 static const char *
 trapname(int trapno)
@@ -205,7 +205,7 @@ trap_dispatch(struct trapframe *tf)
                 print_ticks();
             }
             break;
-        case IRQ_OFFSET + IRQ_COM1:
+        case IRQ_OFFSET + IRQ_COM1://串口中断,显示收到的字符
             c = cons_getc();
             cprintf("serial [%03d] %c\n", c, c);
             break;
@@ -215,6 +215,8 @@ trap_dispatch(struct trapframe *tf)
             break;
             //proj1 CHALLENGE 1 : YOUR CODE you should modify below codes.
         case KERNEL_SWITCH_2_USER:
+            cprintf("trap dispatch KERNEL_SWITCH_2_USER \n");
+            print_trapframe(tf);
             if (tf->tf_cs != USER_CS) {
                 switchk2u = *tf;
                 switchk2u.tf_cs = USER_CS;
@@ -231,6 +233,8 @@ trap_dispatch(struct trapframe *tf)
             }
             break;
         case USER_SWITCH_2_KERNEL:
+            cprintf("trap dispatch USER_SWITCH_2_KERNEL\n");
+            print_trapframe(tf);
             if (tf->tf_cs != KERNEL_CS) {
                 tf->tf_cs = KERNEL_CS;
                 tf->tf_ds = tf->tf_es = KERNEL_DS;
@@ -253,8 +257,8 @@ trap_dispatch(struct trapframe *tf)
         }
 }
 
-/* *
- * trap - handles or dispatches an exception/interrupt. if and when trap() returns,
+/* *trap -
+ * handles or dispatches an exception/interrupt. if and when trap() returns,
  * the code in kern/trap/trapentry.S restores the old CPU state saved in the
  * trapframe and then uses the iret instruction to return from the exception.
  * */

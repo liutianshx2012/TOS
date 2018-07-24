@@ -500,7 +500,7 @@ call 指令压栈,所以 bootmain 中 ebp = 0x7bf8.
 6.1==> 中断向量表中一个表项占多少字节？其中哪几位代表中断处理代码的入口？
 
 中断向量表一个表项占用8字节,其中2-3字节是段选择子,0-1字节和6-7字节拼成位移,
-两者联合便是中断处理程序的入口地址.
+两者结合便是中断处理程序的入口地址.
 
 6.2===> 完善kern/trap/trap.c中对中断向量表进行初始化的函数idt_init.
 
@@ -512,10 +512,11 @@ call 指令压栈,所以 bootmain 中 ebp = 0x7bf8.
 7===>增加syscall功能,即增加一用户态函数(可执行一特定系统调用:获得时钟计数值),
 当内核初始完毕后,可从内核态返回到用户态的函数,而用户态的函数又通过系统调用得到内核态的服务
 
-在idt_init中,将用户态调用SWITCH_TOK中断的权限打开.
-	SETGATE(idt[T_SWITCH_TOK], 1, KERNEL_CS, __vectors[T_SWITCH_TOK], 3);
+在idt_init中,将用户态调用 SWITCH_TO_KERNEL 中断的权限打开.
+	    SETGATE(idt[USER_SWITCH_2_KERNEL], 0, G_D_K_TEXT, __vectors
+                              [USER_SWITCH_2_KERNEL], DPL_USER);
 
-在trap_dispatch中,将iret时会从堆栈弹出的段寄存器进行修改
+在 trap_dispatch 中,将iret时会从堆栈弹出的段寄存器进行修改
 	对TO User
 ```
 	    tf->tf_cs = USER_CS;
@@ -531,7 +532,7 @@ call 指令压栈,所以 bootmain 中 ebp = 0x7bf8.
 	    tf->tf_es = KERNEL_DS;
 ```
 
-在test_switch_to_user中,调用T_SWITCH_TOU中断.
+在 test_switch_to_user 中,调用 KERNEL_SWITCH_2_USER 中断.
 注意从中断返回时,会多pop两位,并用这两位的值更新ss,sp,损坏堆栈.
 所以要先把栈压两位,并在从中断返回后修复esp.
 ```
@@ -540,18 +541,18 @@ call 指令压栈,所以 bootmain 中 ebp = 0x7bf8.
 	    "int %0 \n"
 	    "movl %%ebp, %%esp"
 	    : 
-	    : "i"(T_SWITCH_TOU)
+	    : "i"(KERNEL_SWITCH_2_USER)
 	);
 ```
 
-在test_switch_to_kernel中,调用T_SWITCH_TOK中断.
+在test_switch_to_kernel中,调用USER_SWITCH_2_KERNEL中断.
 注意从中断返回时,esp仍在TSS指示的堆栈中.所以要在从中断返回后修复esp.
 ```
 	asm volatile (
 	    "int %0 \n"
 	    "movl %%ebp, %%esp \n"
 	    : 
-	    : "i"(T_SWITCH_TOK)
+	    : "i"(USER_SWITCH_2_KERNEL)
 	);
 ```
 
@@ -561,3 +562,73 @@ call 指令压栈,所以 bootmain 中 ebp = 0x7bf8.
 ```
 
 /**************************************************************/
+
+
+/**************************************************************/
+中断处理过程
+
+1===> 当系统接收到中断后, 会根据中断类型产生一个中断向量.
+2===> 用这个中断向量作为索引在IDT中找到相应的中断描述符.
+3===> 利用中断描述符中的Segment Selector在GDT中找到相应的Segment.
+4===> 将3中找到的Segment和中断描述符中的Offset(也就是中断向量表中存储的中断向量的地址)相加得到中断服务例程的地址.
+5===> 调用这个中断服务例程.
+
+
+
+trap函数（定义在trap.c中）是对中断进行处理的过程,所有的中断在经过中断入口函数 __alltraps
+预处理后（定义在trapentry.S中）,都会跳转到这里.
+
+在处理过程中,根据不同的中断类型,进行相应的处理.在相应的处理过程结束之后,trap将会返回,被中
+断的程序会继续运行.整个中断处理流程大致如下:
+
+1 ==> trapentry.S   __alltraps
+2 ==> trap.c     void trap(struct trapframe *tf)
+	A : ==> 产生中断后, CPU 跳转到相应的中断处理入口 vectors.S, 并在栈中 push 相应的
+		    error code(根据异常号来判断是否有 error code) 以及 trap no,然后跳转到 
+			trapentry.S   __alltraps 函数入口.
+		warning : 此处的跳转是 jmp 过程
+
+		------------------------------
+		      high      |      ...
+        -------------------------------
+	 	  产生中断时的 eip|     eip
+        -------------------------------
+		     		    |     error_code
+        -------------------------------
+		     esp ->     |     trap_no
+        -------------------------------
+			low         |   ....
+	    --------------------------------
+
+		1==>在栈中保存当前被打断程序的 trapframe struct . 
+		2==>设置 kernel 的数据段寄存器(DS)
+		3==>push esp,作为 trap 函数参数(struct trapframe *tf) 并call trap.
+
+		warning: 此时的跳转是 call 指令, 会自动 push eip(返回地址), 区分此处 eip 与
+		trapframe 中 eip;    
+
+	B : ==> 详细的中断分类以及处理流程如下:
+			根据中断号对不同的中断进行处理. 其中,若中断号是 IRQ_OFFSET + IRQ_TIMER 为
+			时钟中断, 则把ticks 将+1.
+			IRQ_OFFSET + IRQ_COM1://串口中断,显示收到的字符
+			IRQ_OFFSET + IRQ_KBD: //键盘中断
+
+	C : ==> 结束 trap 函数的执行后,通过 ret 指令返回到 __alltraps 执行过程.
+			1==> 从栈中恢复所有 寄存器的值
+			2==> 调整 esp 的值: 跳过栈中 trap_no & error_code, 使 esp ->中断返回 eip , 通过 iret 指令恢复 CS、EFLAG 以及 EIP ,继续执行.
+
+
+
+the IRET instruction pops the return instruction pointer, return code segment selector, and EFLAGS image from the stack to the EIP, CS, and EFLAGS registers, respectively, and then resumes execution of the interrupted program or procedure. If the return is to another privilege level, the IRET instruction also pops the stack pointer and SS from the stack, before resuming program execution.
+
+1.恢复IP(instruction pointer)
+2.恢复CS(code segment)
+3.恢复中断前的PSW(program status word),即恢复中断前的标志寄存器的状态.
+4.恢复ESP（返回权限发生变化）
+5.恢复SS（返回权限发生变化）
+
+/**************************************************************/
+
+和CPU无关的,比如外设的请求等,这些属于Interrupt.
+和CPU有关的,比如除0,page fault等,这些属于Exception.
+系统调用,这些属于Trap

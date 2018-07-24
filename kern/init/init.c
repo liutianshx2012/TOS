@@ -72,25 +72,25 @@ static void
 test_switch_to_user(void)
 {
     __asm__ volatile (
-        "sub $0x8, %%esp \n"
-        "int %0 \n"
+        "sub $0x8, %%esp;"
+        "int %0;"
         "movl %%ebp, %%esp"
         :
         : "i"(KERNEL_SWITCH_2_USER)
     );
-    cprintf("test_switch_to_user....\n");
+    cprintf("trap ret test_switch_to_user....\n");
 }
 
 static void
 test_switch_to_kernel(void)
 {
     __asm__ volatile (
-        "int %0 \n"
-        "movl %%ebp, %%esp \n"
+        "int %0;"
+        "movl %%ebp, %%esp;"
         :
         : "i"(USER_SWITCH_2_KERNEL)
     );
-    cprintf("test_switch_to_kernel....\n");
+    cprintf("trap ret test_switch_to_kernel....\n");
 }
 
 static void

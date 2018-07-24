@@ -2,7 +2,8 @@
 
 # 紧接着第一步处理后,进一步完成第二步处理;
 # 并且有恢复中断上下文的处理,即中断处理完毕后的返回准备工作;
-
+# 中断可分为两类 1==> push error code ; 2==> push 0; push 中断ID. 共push 两个参数,
+# 中断处理函数 跳转到 统一的入口 __alltraps 处.
 # vectors.S sends all traps here.
 .text
 .globl __alltraps
