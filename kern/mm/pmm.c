@@ -32,6 +32,35 @@
  * */
 static struct taskstate ts = {0};
 
+/* virtual address of physical page array */
+struct Page *pages;
+
+/* amount of physical memory (int pages) */
+size_t npage = 0;
+
+/* virtual address of boot-time page directory */ 
+pde_t *boot_pgdir = NULL;
+
+/*physical address of boot-time page directory*/
+uintptr_t boot_cr3;
+/* physical memory management*/
+const struct pmm_manager *pmm_manager;
+
+/* *
+ * The page directory entry corresponding to the virtual address range
+ * [VPT, VPT + PTSIZE) [0xFAC00000, 0xFAC00000 + 0x400)points to the page directory *
+ * itself. Thus, the page directory is treated as a page table as well as a page directory.
+ * 
+ * One result of treating the page directory as a page table is that all PTEs
+ * can be accessed though a "virtual page table" at virtual address VPT. And the
+ * PTE for number n is stored in vpt[n].
+ *
+ * A second consequence is that the contents of the current page directory will
+ * always available at virtual address PGADDR(PDX(VPT), PDX(VPT), 0), to which
+ * vpd is set bellow.
+ * */
+pte_t * const vpt = (pte_t *)VPT;
+pde_t * const vpd = (pde_t *)PGADDR(PDX(VPT), PDX(VPT), 0);
 /* *
  * Global Descriptor Table:
  * 全局描述表 gdt[]
@@ -112,15 +141,25 @@ gdt_init(void)
     ltr(G_D_TSS);
 }
 
-/* pmm_init - initialize the physical memory management*/
-/* GDT (Global Descriptor Table ) 和LDT (Local Descriptor Table),每一张段表可以包含
- *  8192(2^13)个描述符,因而最多可以同时 存在2 * 2^13 = 2 ^14个段.
- *  虽然保护模式下可以有这么多段,逻辑地址空间看起来很大,但实际上段并不能扩展物理地址空间,
- *  很大程度上各个段的地址空间是相互重叠的.目前所谓的64TB(2^(14+32) = 2 ^46)逻辑地址空间是
- *  一个理论值,没有实际意义.在32bit保护模式下,真正的物理空间仍然只有2^32字节那么大.
+/* init_pmm_manager - initialize a pmm_manager instance */
+static void
+init_pmm_manager(void)
+{
+    pmm_manager 
+}
+
+/* pmm_init - setup a pmm to manage physical memory, build  PDT & PT to setup paging
+ * mechanism  check the correctness of pmm & paging mechanism , print PDT & PT
  **/
 void
 pmm_init(void)
 {
+    /* We need to alloc | free the physical memory (granularity is 4KB or other size).
+     * So a framework of physical memory manager (struct pmm_manger) is defined in pmm.h
+     * First  we  should init  a physical memory manager(pmm) based on the  framework.
+     * Then  pmm can alloc | free the physical  memory.
+     * Now the first_fit | best_fit | worst_fit | buddy_system pmm are available. 
+     */
+    
     gdt_init();
 }
