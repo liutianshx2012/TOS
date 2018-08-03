@@ -227,14 +227,16 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info)
 void
 print_kerninfo(void)
 {
-    extern char etext[], edata[], end[], kern_init[];
+    extern char etext[], edata[], end[], kern_entry[];
     cprintf("Special kernel symbols:\n");
-    cprintf("  entry  0x%08x (phys)\n", kern_init);//0x00100000 (phys)
-    cprintf("  etext  0x%08x (phys)\n", etext);    //0x0010348f (phys)
-    cprintf("  edata  0x%08x (phys)\n", edata);    //0x0010ea18 (phys)
-    cprintf("  end    0x%08x (phys)\n", end);      //0x0010fd80 (phys)
-    // end - kern_init = 0xFD80 = 64896 = 63KB
-    cprintf("Kernel executable memory footprint: %dKB\n", (end - kern_init + 1023)/1024);
+    cprintf("  entry  0x%08x (phys)\n", kern_entry - 0xC0000000);//0xc0100000 (la)
+    cprintf("  etext  0x%08x (phys)\n", etext- 0xC0000000);     //0xc0105c23 (la)
+    cprintf("  edata  0x%08x (phys)\n", edata- 0xC0000000);     //0xc0117a38 (la)
+    cprintf("  end    0x%08x (phys)\n", end- 0xC0000000);       //0xc01189c8 (la)
+    // kernel.ld  . = ALIGN(0x1000);  4kb 对齐
+    // end - kern_entry = 0x189C8 = 100808  ; (100808 + 1023) / 1024 = 99KB
+    // sizeof (data) = edata - etext= 0xc0117a38 -0xc0105c23 = 73237 = 71kb;
+    cprintf("Kernel executable phys memory footprint: %dKB\n", (end - kern_entry + 1023)/1024);
 }
 
 /* *

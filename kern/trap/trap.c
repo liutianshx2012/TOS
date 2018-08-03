@@ -76,7 +76,7 @@ idt_init(void)
     }
     /* SET for switch from user to kernel*/
     SETGATE(idt[USER_SWITCH_2_KERNEL], 0, KERNEL_CS, __vectors
-                              [USER_SWITCH_2_KERNEL], DPL_USER);
+                              [USER_SWITCH_2_KERNEL], DPL_KERNEL);
 
     /*load the IDT ==> 使用 LIDT 指令加载 IDT 中断描述符表*/
     lidt(&idt_pd);
@@ -137,14 +137,7 @@ print_trapframe(struct trapframe *tf)
 {
     cprintf("trapframe at %p\n", tf);
     
-    cprintf("  edi  0x%08x\n", tf->tf_regs.reg_edi);
-    cprintf("  esi  0x%08x\n", tf->tf_regs.reg_esi);
-    cprintf("  ebp  0x%08x\n", tf->tf_regs.reg_ebp);
-    cprintf("  oesp 0x%08x\n", tf->tf_regs.reg_oesp);
-    cprintf("  ebx  0x%08x\n", tf->tf_regs.reg_ebx);
-    cprintf("  edx  0x%08x\n", tf->tf_regs.reg_edx);
-    cprintf("  ecx  0x%08x\n", tf->tf_regs.reg_ecx);
-    cprintf("  eax  0x%08x\n", tf->tf_regs.reg_eax);
+    print_regs(&tf->tf_regs);
 
     cprintf("  ds   0x----%04x\n", tf->tf_ds);
     cprintf("  es   0x----%04x\n", tf->tf_es);
@@ -215,8 +208,6 @@ trap_dispatch(struct trapframe *tf)
             break;
             //proj1 CHALLENGE 1 : YOUR CODE you should modify below codes.
         case KERNEL_SWITCH_2_USER:
-            cprintf("trap dispatch KERNEL_SWITCH_2_USER \n");
-            print_trapframe(tf);
             if (tf->tf_cs != USER_CS) {
                 switchk2u = *tf;
                 switchk2u.tf_cs = USER_CS;
@@ -233,8 +224,8 @@ trap_dispatch(struct trapframe *tf)
             }
             break;
         case USER_SWITCH_2_KERNEL:
-            cprintf("trap dispatch USER_SWITCH_2_KERNEL\n");
-            print_trapframe(tf);
+            // cprintf("trap dispatch USER_SWITCH_2_KERNEL\n");
+            // print_trapframe(tf);
             if (tf->tf_cs != KERNEL_CS) {
                 tf->tf_cs = KERNEL_CS;
                 tf->tf_ds = tf->tf_es = KERNEL_DS;

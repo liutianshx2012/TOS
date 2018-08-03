@@ -100,7 +100,7 @@ readseg(uintptr_t va, uint32_t count, uint32_t offset)
 void
 bootmain(void)
 {
-    /* read the 1st page off disk 首先读取ELF的头部(2^(9+3))= 4kb,加载到 va=0x10000 处 */
+    /* read the 1st page off disk 首先读取ELF的头部(2^(9+3))= 4kb,加载到 va=la=pa=0x10000 处 */
     readseg((uintptr_t)ELFHDR, SECTSIZE * 8, 0);
 
     /* is this a valid ELF? 首先判断是不是ELF*/
@@ -112,32 +112,17 @@ bootmain(void)
 
     /* load each program segment (ignores ph flags)
      * ELF头部有描述ELF文件应加载到内存什么位置的描述表,这里读取出来将之存入ph
-     * p /x ph->p_va = 0x100000
-     * p /x ph->p_memsz =  0xd939 (55609)
-     * p /x ph->p_offset = 0x1000 (2^12 = 4096)
      **/
     ph = (struct proghdr *)((uintptr_t)ELFHDR + ELFHDR->e_phoff);
-    /* ph =>0x10034  (0x34 = 52) 从ELF 头处 offset => 0x34 处加载
-     * segment => 2 指针偏移2, 两个 struct proghdr 内存占位 sizeof(struct proghdr) = 32
-     * eph => 0x10034 + 2(32) = 0x10034 + 0x20 *2 = 0x10074
-     */
+
     eph = ph + ELFHDR->e_phnum; 
-    /* os kernel 会编译成 ELF 文件, 其中 SEGMENT 描述了 怎么在虚拟内存中加载（layout）
-     * 分别加载到 virtual address
-     * 按照程序头表的描述,将ELF文件中的数据载入内存
-     */
+    
     for (; ph < eph; ph ++) {
-        readseg(ph->p_va & 0xFFFFFF, ph->p_memsz, ph->p_offset);
+        //这里的 ph->p_va = 0xC0XX XXXX,这个 ld 根据 kernel.ld 设置的 link addr = virtual addr.
+        // ph->p_va & 0xFFffff = 0x0xx xxxx,所以 bootloader 加载 kernel ELF 的 load addr = physical addr = 0x0xx xxxx,这实际上是 kernel 所在的物理地址. 
+        readseg(ph->p_va & 0xFFffff, ph->p_memsz, ph->p_offset);
     }
-    /* 第二个段 ph->p_va = > 0x10e000    ph->p_offset => 0xf000
-     * ELF文件 0x1000 位置后面的 0xd1ec 比特被载入内存 0x00100000
-     * ELF文件 0xf000 位置后面的 0x1d20 比特被载入内存 0x0010e000
-     * call the entry point from the ELF header
-     * note: does not return
-     * 根据ELF头表中的入口信息,找到内核的入口并开始运行 
-     * ph => 0x10074  ELFHDR = > 0x10000    0x74 = 116 (52 + 32 + 32)
-     **/
-    ((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))();
+    ((void (*)(void))(ELFHDR->e_entry & 0xFFffff))();
 
 bad:
     outw(0x8A00, 0x8A00);

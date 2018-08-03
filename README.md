@@ -1,2 +1,4 @@
 # TOS
-#boot
+# boot
+# kernel
+# physical memory | page 

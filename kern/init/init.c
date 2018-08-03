@@ -29,7 +29,7 @@ kern_init(void)
     cons_init();
     const char *message = "TOS is loading...";
     cprintf("%s\n\n",message);
-
+/*
     print_kerninfo();
     mon_backtrace(0, NULL, NULL);
 
@@ -41,9 +41,9 @@ kern_init(void)
     clock_init();
     intr_enable();
 
-    /* user/kernel mode switch test*/
+    // user/kernel mode switch test
     test_switch_kernel_user_model();
-
+*/
     /*do nothing*/
     while(1);
 }

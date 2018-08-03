@@ -117,14 +117,18 @@ $(call add_files_cc,$(call listf_cc,$(LIBDIR)),libs,)
 KINCLUDE	+= kern/debug/ \
 			   kern/driver/ \
 			   kern/trap/ \
-			   kern/mm/
+			   kern/mm/ \
+			   kern/libs/ \
+			   kern/sync/
 
 KSRCDIR		+= kern/init \
 			   kern/libs \
 			   kern/debug \
 			   kern/driver \
 			   kern/trap \
-			   kern/mm
+			   kern/mm \
+			   kern/sync
+			   
 
 KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
 
@@ -207,6 +211,7 @@ QEMUOPTS = -hda $(TOSIMG)
 .PHONY: qemu  debug
 qemu: $(TOSIMG)
 	$(V)$(QEMU) -parallel stdio $(QEMUOPTS) -serial null
+	
 TERMINAL       :=bash
 debug: $(TOSIMG)
 	$(V)$(QEMU) -S -s -parallel stdio $(QEMUOPTS) -serial null &

@@ -56,7 +56,7 @@ seta20.2:
     outb %al, $0x60  # 0xdf = 11011111, means set P2's A20 bit(the 1 bit) to 1  ; 将al中的数据写入到0x60端口中
 
 probe_memory:
-    movl $0, 0x8000
+    movl $0, 0x8000  # 把 e820 映射结构保存在 phys addr 0x8000处
     xorl %ebx, %ebx
     movw $0x8004, %di
 start_probe:

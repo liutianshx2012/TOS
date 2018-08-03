@@ -299,49 +299,52 @@ struct taskstate {
 #endif /* !__ASSEMBLER__ */
 
 // A linear address 'la' has a three-part structure as follows:
-//
+// 二级页表
 // +--------10------+-------10-------+---------12----------+
 // | Page Directory |   Page Table   | Offset within Page  |
 // |      Index     |     Index      |                     |
 // +----------------+----------------+---------------------+
-//  \--- PDX(la) --/ \--- PTX(la) --/ \---- PGOFF(la) ----/
-//  \----------- PPN(la) -----------/
+//  \--- PDX(la) --/ \--- PTX(la) --/ \---- PG_OFF(la) ----/
+//  \----------- PAGE_PHY_N(la) -----/
 //
-// The PDX, PTX, PGOFF, and PPN macros decompose linear addresses as shown.
-// To construct a linear address la from PDX(la), PTX(la), and PGOFF(la),
-// use PGADDR(PDX(la), PTX(la), PGOFF(la)).
+//  1024 PDE * 1024 PTE = 2^20 Pages = 1M Pages , 这部分需要占用的内存大小为 
+//
+// The PDX, PTX, PG_OFF, and PAGE_PHY_N macros decompose linear addresses as shown.
+// To construct a linear address la from PDX(la), PTX(la), and PG_OFF(la),
+// use PG_ADDR(PDX(la), PTX(la), PG_OFF(la)).
 
-// page directory index
-#define PDX(la) ((((uintptr_t)(la)) >> PDXSHIFT) & 0x3FF)
+//the index of page directory entry of VIRTUAL ADDRESS la 0x3FF = 0011 1111 1111
+#define PDX(la) ((((uintptr_t)(la)) >> PDX_SHIFT) & 0x3FF) // offset = 22 = PDX_SHIFT
 
 // page table index
-#define PTX(la) ((((uintptr_t)(la)) >> PTXSHIFT) & 0x3FF)
+#define PTX(la) ((((uintptr_t)(la)) >> PTX_SHIFT) & 0x3FF)// offset = 12 = PTX_SHIFT
 
-// page number field of address
-#define PPN(la) (((uintptr_t)(la)) >> PTXSHIFT)
+// page number field of address (linear addr) 线性地址的 高20bit 页表的索引值
+#define PAGE_PHY_N(la) (((uintptr_t)(la)) >> PTX_SHIFT)
 
-// offset in page
-#define PGOFF(la) (((uintptr_t)(la)) & 0xFFF)
+// offset in page 0xFFF = 1111 1111 1111
+#define PG_OFF(la) (((uintptr_t)(la)) & 0xFFF)
 
 // construct linear address from indexes and offset
-#define PGADDR(d, t, o) ((uintptr_t)((d) << PDXSHIFT | (t) << PTXSHIFT | (o)))
+#define PG_ADDR(d, t, o) ((uintptr_t)((d) << PDX_SHIFT | (t) << PTX_SHIFT | (o)))
 
-// address in page table or page directory entry
-
+// (physical)address in page table or page directory entry 高20位就是页表的索引
+// [32bit= 0xFFFFffff] ~0xFFF=0xFFFFf000=1111 1111 1111 1111 1111 0000 0000 0000
 #define PTE_ADDR(pte)   ((uintptr_t)(pte) & ~0xFFF)
+
 #define PDE_ADDR(pde)   PTE_ADDR(pde)
 
 /* page directory and page table constants */
-#define NPDEENTRY       1024                    // page directory entries per page directory
-#define NPTEENTRY       1024                    // page table entries per page table
+#define N_PDE_ENTRY       1024                    // page directory entries per page directory
+#define N_PTE_ENTRY       1024                    // page table entries per page table
 
-#define PGSIZE          4096                    // bytes mapped by a page
-#define PGSHIFT         12                      // log2(PGSIZE)
-#define PTSIZE          (PGSIZE * NPTEENTRY)    // bytes mapped by a page directory entry
-#define PTSHIFT         22                      // log2(PTSIZE)
+#define PAGE_SIZE         4096                    // bytes mapped by a page
+#define PG_SHIFT         12                      // log2(PAGE_SIZE)
+#define PT_SIZE          (PAGE_SIZE * N_PTE_ENTRY)    // bytes mapped by a page directory entry  4kb * 1024 = 4 MB ,Page Diectory Entry 占 4MB 内存大小
+#define PT_SHIFT         22                      // log2(PT_SIZE)
 
-#define PTXSHIFT        12                      // offset of PTX in a linear address
-#define PDXSHIFT        22                      // offset of PDX in a linear address
+#define PTX_SHIFT        12                      // offset of PTX in a linear address
+#define PDX_SHIFT        22                      // offset of PDX in a linear address
 
 /* page table/directory entry flags */
 #define PTE_P           0x001                   // Present
