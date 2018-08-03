@@ -142,7 +142,6 @@ gdt_init(void)
 
     /*initialize the TSS filed of the gdt*/
     gdt[SEG_K_TSS] = SEG_TSS(SST_T32A,(uintptr_t)&ts,sizeof(ts),DPL_KERNEL);
-    gdt[SEG_K_TSS].sd_s = 0;
 
     /*reload all Segment registers*/
     lgdt(&gdt_pd);

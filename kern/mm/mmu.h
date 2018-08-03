@@ -295,7 +295,7 @@ struct taskstate {
     uint16_t ts_padding10;
     uint16_t ts_t;           	 // trap on task switch
     uint16_t ts_iomb;        	 // i/o map base address
-};
+}__attribute__((packed)); 
 #endif /* !__ASSEMBLER__ */
 
 // A linear address 'la' has a three-part structure as follows:

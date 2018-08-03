@@ -68,7 +68,7 @@ static uint16_t addr_6845;
 static void
 cga_init(void)
 {
-    volatile uint16_t *cp = (uint16_t *)CGA_BUF + KERN_BASE;
+    volatile uint16_t *cp = (uint16_t *)(CGA_BUF + KERN_BASE);
     uint16_t was = *cp;
     *cp = (uint16_t) 0xA55A;
     if (*cp != 0xA55A) {
@@ -471,7 +471,7 @@ cons_putc(int c)
 int
 cons_getc(void)
 {
-    int c;
+    int c = 0;
     bool intr_flag;
     local_intr_save(intr_flag);
     {
