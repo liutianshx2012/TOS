@@ -25,7 +25,7 @@ static inline bool test_bit(int nr, volatile void *addr) __attribute__((always_i
 static inline void
 set_bit(int nr, volatile void *addr) 
 {
-    asm volatile ("btsl %1, %0" :"=m" (*(volatile long *)addr) : "Ir" (nr));
+    __asm__ volatile ("btsl %1, %0" :"=m" (*(volatile long *)addr) : "Ir" (nr));
 }
 
 /* *
@@ -36,7 +36,7 @@ set_bit(int nr, volatile void *addr)
 static inline void
 clear_bit(int nr, volatile void *addr) 
 {
-    asm volatile ("btrl %1, %0" :"=m" (*(volatile long *)addr) : "Ir" (nr));
+    __asm__ volatile ("btrl %1, %0" :"=m" (*(volatile long *)addr) : "Ir" (nr));
 }
 
 /* *
@@ -47,7 +47,7 @@ clear_bit(int nr, volatile void *addr)
 static inline void
 change_bit(int nr, volatile void *addr) 
 {
-    asm volatile ("btcl %1, %0" :"=m" (*(volatile long *)addr) : "Ir" (nr));
+    __asm__ volatile ("btcl %1, %0" :"=m" (*(volatile long *)addr) : "Ir" (nr));
 }
 
 /* *
@@ -59,7 +59,7 @@ static inline bool
 test_bit(int nr, volatile void *addr) 
 {
     int oldbit;
-    asm volatile ("btl %2, %1; sbbl %0,%0" : "=r" (oldbit) : "m" (*(volatile long *)addr), "Ir" (nr));
+    __asm__ volatile ("btl %2, %1; sbbl %0,%0" : "=r" (oldbit) : "m" (*(volatile long *)addr), "Ir" (nr));
     return oldbit != 0;
 }
 

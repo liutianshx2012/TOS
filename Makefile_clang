@@ -36,13 +36,13 @@ HOSTCC		:= clang
 HOSTCFLAGS	:= -g -Wall -O2
 
 
-ARGS_CC_WARN          :=  -Wall #-Werror
-ARGS_CC_STD           := -std=c99
+ARGS_CC_WARN          :=  -Wall   #-Werror 
+ARGS_CC_STD           := -std=gnu99
 ARGS_CC_GGDB          := -ggdb
 ARGS_CC_CONST         := -D
 ARGS_CC_INC           := -I $(DIR_INC)
 ARGS_CC_OPTIM         := -Os
-ARGS_CC_MISC          := -fno-strict-aliasing -nostdlib -nostdinc -fno-builtin -fblocks
+ARGS_CC_MISC          := -fno-strict-aliasing -nostdlib -nostdinc -fno-builtin -fblocks -fno-stack-protector
 ARGS_CC_PROFILE       := -finstrument-functions
 ARGS_CC_PIC           := -fPIC
 ARGS_CC_TARGET_i386   := -march=i386 -target i386-elf-freebsd
@@ -112,14 +112,17 @@ $(call add_files_cc,$(call listf_cc,$(LIBDIR)),libs,)
 KINCLUDE	+= kern/debug/ \
 			   kern/driver/ \
 			   kern/trap/ \
-			   kern/mm/
+			   kern/mm/ \
+			   kern/libs/ \
+			   kern/sync/
 
 KSRCDIR		+= kern/init \
 			   kern/libs \
 			   kern/debug \
 			   kern/driver \
 			   kern/trap \
-			   kern/mm
+			   kern/mm \
+			   kern/sync
 
 KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
 
@@ -133,10 +136,12 @@ kernel = $(call totarget,kernel)
 $(kernel): tools/kernel.ld
 
 $(kernel): $(KOBJS)
+	@echo "--------------------------------"
 	@echo + ld $@
 	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS)
 	@$(OBJDUMP) -S $@ > $(call asmfile,kernel)
 	@$(OBJDUMP) -t $@ | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,kernel)
+	@echo "--------------------------------"
 
 $(call create_target,kernel)
 
@@ -149,12 +154,14 @@ $(foreach f,$(bootfiles),$(call cc_compile,$(f),$(CC),$(CFLAGS) -Os -nostdinc))
 bootblock = $(call totarget,bootblock)
 
 $(bootblock): $(call toobj,$(bootfiles)) | $(call totarget,sign)
+	@echo "--------------------------------"
 	@echo + ld $@
 	$(V)$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 $^ -o $(call toobj,bootblock)
 	@$(OBJDUMP) -S $(call objfile,bootblock) > $(call asmfile,bootblock)
 	@$(OBJDUMP) -t $(call objfile,bootblock) | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,bootblock)
 	@$(OBJCOPY) -S -O binary $(call objfile,bootblock) $(call outfile,bootblock)
 	@$(call totarget,sign) $(call outfile,bootblock) $(bootblock)
+	@echo "--------------------------------"
 
 $(call create_target,bootblock)
 
@@ -188,9 +195,12 @@ all: $(TARGETS)
 
 .PHONY: qemu debug
 
-qemu: $(TOSIMG)
-	$(V)$(QEMU) -no-reboot -parallel stdio -hda $< -serial null
+QEMUOPTS = -hda $(TOSIMG)
 
+.PHONY: qemu  debug
+qemu: $(TOSIMG)
+	$(V)$(QEMU) -parallel stdio $(QEMUOPTS) -serial null
+	
 TERMINAL:= gnome-terminal
 debug: $(TOSIMG)
 	$(V)$(QEMU) -S -s -parallel stdio -hda $< -serial null &
@@ -202,5 +212,5 @@ debug: $(TOSIMG)
 
 .PHONY: clean
 clean:
-	-$(RM) -r $(OBJDIR) $(BINDIR)
+	$(V)$(RM) -r $(OBJDIR) $(BINDIR)
 

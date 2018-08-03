@@ -65,7 +65,7 @@ void print_pgdir(void);
  * PADDR - takes a kernel virtual address (an address that points above KERN_BASE),
  * where the machine's maximum 256MB of physical memory is mapped and returns the
  * corresponding physical address.  It panics if you pass it a non-kernel virtual address.
- * 获取内核虚拟地址(KERN_BASE 上面的 addr),映射 最大 256MB 物理内存并返回对应的物理地址。只接受内核地址.
+ * 获取内核虚拟地址(KERN_BASE 上面的 addr),映射 最大 256MB 物理内存并返回对应的物理地址.只接受内核地址.
  * */
 #define PADDR(kva) (                                          \
         {                                                               \

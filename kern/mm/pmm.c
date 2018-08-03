@@ -207,7 +207,23 @@ nr_free_pages(void)
     local_intr_restore(intr_flag);
     return ret;
 }
+/*
+e820map:
+  memory: 0009fc00, [00000000, 0009fbff], type = 1.
+  memory: 00000400, [0009fc00, 0009ffff], type = 2.
+  memory: 00010000, [000f0000, 000fffff], type = 2.
+  memory: 07ee0000, [00100000, 07fdffff], type = 1.
+  memory: 00020000, [07fe0000, 07ffffff], type = 2.
+  memory: 00040000, [fffc0000, ffffffff], type = 2.
 
+  type =1 才能被 kernel 使用, [0x0009fc00] = 639kb 被 struct page 占用
+           所以 kernel 只能从 [0x00100000] 开始使用空闲的 phys addr.
+           
+           0x07fdffff - 0x07fe0000 = 0x7E27000 B 这么大的 空闲 phys addr 
+           能分配 0x7E27000 / 4096 = 32295 个 free struct page frame (全部未标记))
+           0x001b9000 - 0x00100000 = 0xB9000 = 740 KB
+
+*/
 static void
 page_init(void)
 {
@@ -257,8 +273,9 @@ page_init(void)
             if (begin < end) {
                 begin = ROUNDUP(begin, PAGE_SIZE);
                 end = ROUNDDOWN(end, PAGE_SIZE);
-                cprintf("  begin~end [%08llx, %08llx]\n",begin,end);
                 if (begin < end) {
+                    // [001b9000, 07fe0000]
+                    cprintf("begin~end [%08llx, %08llx]\n",begin,end);
                     // 根据探测到的空闲物理空间,设置空闲标记,获得空闲空间的起始地址和结束地址
                     init_memmap(pa2page(begin), (end - begin) / PAGE_SIZE);
                 }
