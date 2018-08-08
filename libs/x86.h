@@ -302,7 +302,9 @@ rcr1(void)
 
     return cr1;
 }
-
+/*
+CPU 会把产生异常的 la 存储在 CR2 中,并且把表示页访问异常类型的值(简称页访问异常错误码,errorCode)保存在中断栈中.
+*/
 static inline uintptr_t
 rcr2(void) 
 {

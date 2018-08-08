@@ -14,6 +14,9 @@
 #include <clock.h>
 #include <intr.h>
 #include <pmm.h>
+#include <vmm.h>
+#include <ide.h>
+#include <swap.h>
 #include <kmonitor.h>
 
 void kern_init(void) __attribute__((noreturn));
@@ -32,13 +35,17 @@ kern_init(void)
     print_kerninfo();
     mon_backtrace(0, NULL, NULL);
 
-    pmm_init();
+    pmm_init();                 // init physical memory management
 
-    pic_init();
-    idt_init(); 
+    pic_init();                 // init interrupt controller
+    idt_init();                 // init interrupt descriptor table
 
-    clock_init();
-    intr_enable();
+    vmm_init();                 // init virtual memory management
+    ide_init();                 // init ide devices
+    swap_init();                // init swap
+
+    clock_init();               // init clock interrupt
+    intr_enable();              // enable irq interrupt
 
     // user/kernel mode switch test
 //    test_switch_kernel_user_model();

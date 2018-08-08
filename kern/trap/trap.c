@@ -14,6 +14,7 @@
 #include <console.h>
 #include <kdebug.h>
 #include <string.h>
+#include <vmm.h>
 #include <trap.h>
 
 /* 初步处理后,继续完成具体的各种中断处理操作. */
@@ -176,23 +177,47 @@ print_regs(struct pushregs *regs)
     cprintf("  eax  0x%08x\n", regs->reg_eax);
 }
 
-/* temporary trapframe or pointer to trapframe */
-struct trapframe switchk2u, *switchu2k;
+static inline void
+print_pgfault(struct trapframe *tf) 
+{
+    /* error_code:
+     * bit 0 == 0 means no page found, 1 means protection fault
+     * bit 1 == 0 means read, 1 means write
+     * bit 2 == 0 means kernel, 1 means user
+     * */
+    cprintf("page fault at 0x%08x: %c/%c [%s].\n", rcr2(),
+            (tf->tf_err & 4) ? 'U' : 'K',
+            (tf->tf_err & 2) ? 'W' : 'R',
+            (tf->tf_err & 1) ? "protection fault" : "no page found");
+}
 
+static int 
+pgfault_handler(struct trapframe *tf) 
+{
+    print_pgfault(tf);
+    if (check_mm_struct != NULL) {
+        return do_pgfault(check_mm_struct, tf->tf_err, rcr2());
+    }
+    panic("unhandled page fault.\n");
+}
+
+/* temporary trapframe or pointer to trapframe */
+extern struct mm_struct *check_mm_struct;
 /* trap_dispatch - dispatch based on what type of trap occurred */
 static void
 trap_dispatch(struct trapframe *tf)
 {
     char c;
-
+    int ret;
     switch (tf->tf_trapno) {
+        case T_PGFLT : { //page fault
+            if ((ret = pgfault_handler(tf)) != 0) {
+                print_trapframe(tf);
+                panic("handle pgfault failed. %e\n",ret);
+            }
+            break;
+        }
         case IRQ_OFFSET + IRQ_TIMER:  //时钟中断
-            /* STEP 3 */
-            /* handle the timer interrupt */
-            /* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c
-            * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
-            * (3) Too Simple? Yes, I think so!
-            */
             ticks ++;
             if (ticks % TICK_NUM == 0) {
                 print_ticks();
@@ -208,6 +233,7 @@ trap_dispatch(struct trapframe *tf)
             break;
             //proj1 CHALLENGE 1 : YOUR CODE you should modify below codes.
         case KERNEL_SWITCH_2_USER:
+        /*
             if (tf->tf_cs != USER_CS) {
                 switchk2u = *tf;
                 switchk2u.tf_cs = USER_CS;
@@ -222,10 +248,12 @@ trap_dispatch(struct trapframe *tf)
                 // then iret will jump to the right stack
                 *((uint32_t *)tf - 1) = (uint32_t)&switchk2u;
             }
+            */
             break;
         case USER_SWITCH_2_KERNEL:
             // cprintf("trap dispatch USER_SWITCH_2_KERNEL\n");
             // print_trapframe(tf);
+            /*
             if (tf->tf_cs != KERNEL_CS) {
                 tf->tf_cs = KERNEL_CS;
                 tf->tf_ds = tf->tf_es = KERNEL_DS;
@@ -234,6 +262,7 @@ trap_dispatch(struct trapframe *tf)
                 memmove(switchu2k, tf, sizeof(struct trapframe) - 8);
                 *((uint32_t *)tf - 1) = (uint32_t)switchu2k;
             }
+            */
             break;
         case IRQ_OFFSET + IRQ_IDE1:
         case IRQ_OFFSET + IRQ_IDE2:

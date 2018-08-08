@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <memlayout.h>
 #include <default_pmm.h>
+#include <swap.h>
 #include <pmm.h>
 /* *
  * 全局 任务状态段ts
@@ -52,6 +53,9 @@ pde_t *boot_pgdir = NULL;
 uintptr_t boot_cr3;
 /* physical memory management*/
 const struct pmm_manager *pmm_manager;
+
+extern struct mm_struct *check_mm_struct;
+
 
 /* *
  * The page directory entry corresponding to the virtual address range
@@ -166,17 +170,27 @@ init_memmap(struct Page *base, size_t n)
 {
     pmm_manager->init_memmap(base, n);
 }
+
 // call pmm->alloc_pages to allocate a continuous  n * PAGESIZE memory
 struct Page *
 alloc_pages(size_t n)
 {
     struct Page *page = NULL;
     bool intr_flag;
-    local_intr_save(intr_flag);
-    {
-        page = pmm_manager->alloc_pages(n);
+
+    while (1) {
+        local_intr_save(intr_flag);
+        {
+            page = pmm_manager->alloc_pages(n);
+        }
+        local_intr_restore(intr_flag);
+
+        if (page != NULL || n>1 || swap_init_ok == 0) {
+            break;
+        } 
+        swap_out(check_mm_struct, n, 0);
     }
-    local_intr_restore(intr_flag);
+    // cprintf("n %d,get page %x, No %d in alloc_pages\n",n,page,(page-pages));
     return page;
 }
 
@@ -194,7 +208,7 @@ free_pages(struct Page *base, size_t n)
 }
 
 //nr_free_pages - call pmm->nr_free_pages to get the size (nr*PAGESIZE)
-//of current free memory
+//                of current free memory
 size_t
 nr_free_pages(void)
 {
@@ -231,7 +245,7 @@ page_init(void)
     uint64_t maxpa = 0; //max physical address
     cprintf("e820map:\n");
     int i;
-    for (int i=0;i<memmap->nr_map;i++) {
+    for (i=0;i<memmap->nr_map;i++) {
         uint64_t begin = memmap->map[i].addr;
         uint64_t end = begin + memmap->map[i].size;
         cprintf("  memory: %08llx, [%08llx, %08llx], type = %d.\n",
@@ -348,7 +362,7 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create)
     if (!(*pdep & PTE_P)) {  
         struct Page *page;
         // (3) check if creating is needed, then alloc page for page table
-        //如果create参数为0,则get_pte返回NULL;如果create参数不为0,则get_pte需要申请一个新的物理页（通过alloc_page来实现
+        //如果create参数为0,则get_pte返回NULL;如果create参数不为0,则get_pte需要申请一个新的物理页(通过alloc_page来实现
         if (!create || (page = alloc_page()) == NULL) {
             return NULL;
         }
@@ -456,6 +470,30 @@ page_insert(pde_t *pgdir, struct Page *page, uintptr_t la, uint32_t perm)
     tlb_invalidate(pgdir, la);
     return 0;
 }
+/* pgdir_alloc_page - call alloc_page & page_insert Functions to 
+ *                  - allocate a page size memory & setup an addr map
+ *                  - pa <->la with linear address la and the PDT pgdir
+ */
+struct Page *
+pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm)
+{
+    struct Page *page = alloc_page();
+    if (page != NULL) {
+        if (page_insert(pgdir,page,la,perm) != 0) {
+            free_page(page);
+            return NULL;
+        }
+        if (swap_init_ok) {
+            swap_map_swappable(check_mm_struct,la,page,0);
+            page->pra_vaddr = la;
+            assert(page_ref(page)==1);
+            //cprintf("get No. %d  page: pra_vaddr %x, pra_link.prev %x, pra_link_next %x in pgdir_alloc_page\n", (page-pages), page->pra_vaddr,page->pra_page_link.prev, page->pra_page_link.next);
+        } 
+    }
+
+    return page;
+}
+
 
 static void
 check_pgdir(void)
@@ -739,4 +777,27 @@ print_pgdir(void)
         }
     }
     cprintf("--------------------- END ---------------------\n");
+}
+
+void *
+kmalloc(size_t n)
+{
+    assert(n>0 && n <1024*1024);
+    int num_pages = (n + PAGE_SIZE -1) / PAGE_SIZE;
+    struct Page *base = alloc_pages(num_pages);
+    assert(base != NULL);
+    void *ptr = page2kva(base);
+
+    return ptr;
+}
+
+void 
+kfree(void *ptr, size_t n)
+{
+    assert(n>0 && n <1024*1024);
+    assert(ptr != NULL);
+    struct Page * base = NULL;
+    int num_pages = (n +PAGE_SIZE -1)/PAGE_SIZE;
+    base = kva2page(ptr);
+    free_pages(base,num_pages);
 }

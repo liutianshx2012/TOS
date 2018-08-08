@@ -114,20 +114,23 @@ $(call add_files_cc,$(call listf_cc,$(LIBDIR)),libs,)
 # -------------------------------------------------------------------
 # kernel
 
-KINCLUDE	+= kern/debug/ \
-			   kern/driver/ \
-			   kern/trap/ \
-			   kern/mm/ \
-			   kern/libs/ \
-			   kern/sync/
+KINCLUDE	+= kern/debug/ 		\
+			   kern/driver/ 	\
+			   kern/trap/ 		\
+			   kern/mm/ 	    \
+			   kern/libs/ 		\
+			   kern/sync/ 		\
+			   kern/fs/         
 
-KSRCDIR		+= kern/init \
-			   kern/libs \
-			   kern/debug \
-			   kern/driver \
-			   kern/trap \
-			   kern/mm \
-			   kern/sync
+KSRCDIR		+= kern/init 		\
+			   kern/libs 		\
+			   kern/debug	    \
+			   kern/driver 	    \
+			   kern/trap 	    \
+			   kern/mm 			\
+			   kern/sync        \
+			   kern/fs       
+
 			   
 
 KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
@@ -183,11 +186,29 @@ $(call create_target_host,sign,sign)
 TOSIMG	:= $(call totarget,tos.img)
 	
 $(TOSIMG): $(kernel) $(bootblock)
+	@echo "--------------------------------"
 	$(V)dd if=/dev/zero of=$@ count=10000
 	$(V)dd if=$(bootblock) of=$@ conv=notrunc
 	$(V)dd if=$(kernel) of=$@ seek=1 conv=notrunc
-	
+	@echo "create kernel image successed~"
+	@echo "--------------------------------"
+
+
 $(call create_target,tos.img)
+
+#-------------------------------------------------------------------
+#create swap.img
+SWAPIMG   := $(call totarget,swap.img)
+
+$(SWAPIMG):
+	@echo "--------------------------------"
+	$(V)dd if=/dev/zero of=$@ bs=1m count=128
+	@echo "create swap image successed~"
+	@echo "--------------------------------"
+
+
+
+$(call create_target,swap.img)
 	
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -206,7 +227,7 @@ targets: $(TARGETS)
 all := targets
 .DEFAULT_GOAL := targets
 
-QEMUOPTS = -hda $(TOSIMG)
+QEMUOPTS = -hda $(TOSIMG) -drive file=$(SWAPIMG),media=disk,cache=writeback
 
 .PHONY: qemu  debug
 qemu: $(TOSIMG)

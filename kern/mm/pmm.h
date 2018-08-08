@@ -17,17 +17,17 @@
  * xxx_pmm_manager . only needs to implement the methods in pmm_manager class, then
  * xxx_pmm_manager can be used by kernel to manager the total physical memory space.
 */
-struct pmm_manager 
+struct pmm_manager
 {
-	const char *name;	// XXX_pmm_manager's name
-	void (*init)(void); // initialize internal description & management data structure
-						// (free block list, number of free block) of XXX_pmm_manager
-	void (*init_memmap)(struct Page *base, size_t n);// setup description&management data structcure according to the initial free physical memory space
-	
-	struct Page *(*alloc_pages)(size_t n);            // allocate >=n pages, depend on the allocation algorithm
-    void (*free_pages)(struct Page *base, size_t n);  // free >=n pages with "base" addr of Page descriptor structures(memlayout.h)
-    size_t (*nr_free_pages)(void);                    // return the number of free pages
-    void (*check)(void);                              // check the correctness of XXX_pmm_manager
+    const char *name;                                 // XXX_pmm_manager's name
+    void (*init)(void);                               // initialize internal description & management data structure
+                                                      // (free block list, number of free block) of XXX_pmm_manager
+    void (*init_memmap)(struct Page *base, size_t n); // setup description&management data structcure according to the initial free physical memory space
+
+    struct Page *(*alloc_pages)(size_t n);           // allocate >=n pages, depend on the allocation algorithm
+    void (*free_pages)(struct Page *base, size_t n); // free >=n pages with "base" addr of Page descriptor structures(memlayout.h)
+    size_t (*nr_free_pages)(void);                   // return the number of free pages
+    void (*check)(void);                             // check the correctness of XXX_pmm_manager
 };
 
 extern const struct pmm_manager *pmm_manager;
@@ -60,6 +60,8 @@ void load_esp0(uintptr_t esp0);
 
 void tlb_invalidate(pde_t *pgdir, uintptr_t la);
 
+struct Page *pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm);
+
 void print_pgdir(void);
 /* *
  * PADDR - takes a kernel virtual address (an address that points above KERN_BASE),
@@ -67,46 +69,48 @@ void print_pgdir(void);
  * corresponding physical address.  It panics if you pass it a non-kernel virtual address.
  * 获取内核虚拟地址(KERN_BASE 上面的 addr),映射 最大 256MB 物理内存并返回对应的物理地址.只接受内核地址.
  * */
-#define PADDR(kva) (                                          \
-        {                                                               \
-            uintptr_t __m_kva = (uintptr_t)(kva);                       \
-            if (__m_kva < KERN_BASE) {                                  \
-                panic("PADDR called with invalid kva %08lx", __m_kva);  \
-            }                                                           \
-            __m_kva - KERN_BASE;                                        \
-        })
+#define PADDR(kva) (                                               \
+    {                                                              \
+        uintptr_t __m_kva = (uintptr_t)(kva);                      \
+        if (__m_kva < KERN_BASE)                                   \
+        {                                                          \
+            panic("PADDR called with invalid kva %08lx", __m_kva); \
+        }                                                          \
+        __m_kva - KERN_BASE;                                       \
+    })
 /* *
  * KADDR - takes a physical address and returns the corresponding kernel virtual
  * address. It panics if you pass an invalid physical address.
  * */
-#define KADDR(pa) (                                           \
-        {                                                               \
-            uintptr_t __m_pa = (pa);                                    \
-            size_t __m_ppn = PAGE_PHY_N(__m_pa);                               \
-            if (__m_ppn >= npage) {                                     \
-                panic("KADDR called with invalid pa %08lx", __m_pa);    \
-            }                                                           \
-            (void *) (__m_pa + KERN_BASE);                               \
-        })
+#define KADDR(pa) (                                              \
+    {                                                            \
+        uintptr_t __m_pa = (pa);                                 \
+        size_t __m_ppn = PAGE_PHY_N(__m_pa);                     \
+        if (__m_ppn >= npage)                                    \
+        {                                                        \
+            panic("KADDR called with invalid pa %08lx", __m_pa); \
+        }                                                        \
+        (void *)(__m_pa + KERN_BASE);                            \
+    })
 
 extern struct Page *pages;
 extern size_t npage;
 // page 's idx
 static inline ppn_t
-page2ppn(struct Page *page) 
+page2ppn(struct Page *page)
 {
     return page - pages;
 }
 // linear addr
 static inline uintptr_t
-page2pa(struct Page *page) 
+page2pa(struct Page *page)
 {
     return page2ppn(page) << PG_SHIFT;
 }
 
 /* phys addr -> struct Page*/
 static inline struct Page *
-pa2page(uintptr_t pa) 
+pa2page(uintptr_t pa)
 {
     if (PAGE_PHY_N(pa) >= npage) {
         panic("pa2page called with invalid pa");
@@ -115,58 +119,62 @@ pa2page(uintptr_t pa)
 }
 // struct page -> physical addr -> kernel virtual addr
 static inline void *
-page2kva(struct Page *page) 
+page2kva(struct Page *page)
 {
     return KADDR(page2pa(page));
 }
 // kern virt addr -> physical addr -> struct page
 static inline struct Page *
-kva2page(void *kva) 
+kva2page(void *kva)
 {
     return pa2page(PADDR(kva));
 }
 // pte addr (virt addr) -> PTE_ADDR (phys addr) -> struct page (linear addr)
 static inline struct Page *
-pte2page(pte_t pte) 
+pte2page(pte_t pte)
 {
     if (!(pte & PTE_P)) {
         panic("pte2page called with invalid pte");
     }
     return pa2page(PTE_ADDR(pte));
 }
-// pde addr -> physical addr -> struct page 
+// pde addr -> physical addr -> struct page
 static inline struct Page *
-pde2page(pde_t pde) 
+pde2page(pde_t pde)
 {
     return pa2page(PDE_ADDR(pde));
 }
 
 static inline int
-page_ref(struct Page *page) 
+page_ref(struct Page *page)
 {
     return page->ref;
 }
 
 static inline void
-set_page_ref(struct Page *page, int val) 
+set_page_ref(struct Page *page, int val)
 {
     page->ref = val;
 }
 
 static inline int
-page_ref_inc(struct Page *page) 
+page_ref_inc(struct Page *page)
 {
     page->ref += 1;
     return page->ref;
 }
 
 static inline int
-page_ref_dec(struct Page *page) 
+page_ref_dec(struct Page *page)
 {
     page->ref -= 1;
     return page->ref;
 }
 
 extern char bootstack[], bootstacktop[];
+
+extern void *kmalloc(size_t n);
+
+extern void kfree(void *ptr, size_t n);
 
 #endif

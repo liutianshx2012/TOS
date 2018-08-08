@@ -20,7 +20,8 @@
  * directly rather than using the generic single-entry routines.
  * */
 
-struct list_entry {
+struct list_entry 
+{
     struct list_entry *prev, *next;
 };
 
@@ -44,7 +45,8 @@ static inline void __list_del(list_entry_t *prev, list_entry_t *next) __attribut
  * @elm:        new entry to be initialized
  * */
 static inline void
-list_init(list_entry_t *elm) {
+list_init(list_entry_t *elm) 
+{
     elm->prev = elm->next = elm;
 }
 
@@ -57,7 +59,8 @@ list_init(list_entry_t *elm) {
  * is already in the list.
  * */
 static inline void
-list_add(list_entry_t *listelm, list_entry_t *elm) {
+list_add(list_entry_t *listelm, list_entry_t *elm) 
+{
     list_add_after(listelm, elm);
 }
 
@@ -70,7 +73,8 @@ list_add(list_entry_t *listelm, list_entry_t *elm) {
  * is already in the list.
  * */
 static inline void
-list_add_before(list_entry_t *listelm, list_entry_t *elm) {
+list_add_before(list_entry_t *listelm, list_entry_t *elm) 
+{
     __list_add(elm, listelm->prev, listelm);
 }
 
@@ -83,7 +87,8 @@ list_add_before(list_entry_t *listelm, list_entry_t *elm) {
  * is already in the list.
  * */
 static inline void
-list_add_after(list_entry_t *listelm, list_entry_t *elm) {
+list_add_after(list_entry_t *listelm, list_entry_t *elm) 
+{
     __list_add(elm, listelm, listelm->next);
 }
 
@@ -95,7 +100,8 @@ list_add_after(list_entry_t *listelm, list_entry_t *elm) {
  * in an undefined state.
  * */
 static inline void
-list_del(list_entry_t *listelm) {
+list_del(list_entry_t *listelm) 
+{
     __list_del(listelm->prev, listelm->next);
 }
 
@@ -106,7 +112,8 @@ list_del(list_entry_t *listelm) {
  * Note: list_empty() on @listelm returns true after this.
  * */
 static inline void
-list_del_init(list_entry_t *listelm) {
+list_del_init(list_entry_t *listelm) 
+{
     list_del(listelm);
     list_init(listelm);
 }
@@ -116,7 +123,8 @@ list_del_init(list_entry_t *listelm) {
  * @list:       the list to test.
  * */
 static inline bool
-list_empty(list_entry_t *list) {
+list_empty(list_entry_t *list) 
+{
     return list->next == list;
 }
 
@@ -125,7 +133,8 @@ list_empty(list_entry_t *list) {
  * @listelm:    the list head
  **/
 static inline list_entry_t *
-list_next(list_entry_t *listelm) {
+list_next(list_entry_t *listelm) 
+{
     return listelm->next;
 }
 
@@ -134,7 +143,8 @@ list_next(list_entry_t *listelm) {
  * @listelm:    the list head
  **/
 static inline list_entry_t *
-list_prev(list_entry_t *listelm) {
+list_prev(list_entry_t *listelm) 
+{
     return listelm->prev;
 }
 
@@ -145,7 +155,8 @@ list_prev(list_entry_t *listelm) {
  * the prev/next entries already!
  * */
 static inline void
-__list_add(list_entry_t *elm, list_entry_t *prev, list_entry_t *next) {
+__list_add(list_entry_t *elm, list_entry_t *prev, list_entry_t *next) 
+{
     prev->next = next->prev = elm;
     elm->next = next;
     elm->prev = prev;
@@ -158,7 +169,8 @@ __list_add(list_entry_t *elm, list_entry_t *prev, list_entry_t *next) {
  * the prev/next entries already!
  * */
 static inline void
-__list_del(list_entry_t *prev, list_entry_t *next) {
+__list_del(list_entry_t *prev, list_entry_t *next) 
+{
     prev->next = next;
     next->prev = prev;
 }
