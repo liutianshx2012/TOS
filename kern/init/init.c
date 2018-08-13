@@ -17,6 +17,7 @@
 #include <vmm.h>
 #include <ide.h>
 #include <swap.h>
+#include <proc.h>
 #include <kmonitor.h>
 
 void kern_init(void) __attribute__((noreturn));
@@ -41,6 +42,7 @@ kern_init(void)
     idt_init();                 // init interrupt descriptor table
 
     vmm_init();                 // init virtual memory management
+  	proc_init(); 				// init process table
     ide_init();                 // init ide devices
     swap_init();                // init swap
 
@@ -48,10 +50,9 @@ kern_init(void)
     intr_enable();              // enable irq interrupt
 
     // user/kernel mode switch test
-//    test_switch_kernel_user_model();
+    // test_switch_kernel_user_model();
 
-    /*do nothing*/
-    while(1);
+    cpu_idle();					// run idle process
 }
 
 
@@ -102,6 +103,7 @@ test_switch_to_kernel(void)
 static void
 test_switch_kernel_user_model(void)
 {
+    /*
     print_cur_status();
     cprintf("+++ switch to  user  mode +++\n");
     test_switch_to_user();
@@ -109,4 +111,5 @@ test_switch_kernel_user_model(void)
     cprintf("+++ switch to kernel mode +++\n");
     test_switch_to_kernel();
     print_cur_status();
+    */
 }

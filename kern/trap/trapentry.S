@@ -25,7 +25,7 @@ __alltraps:
     pushl %esp
 
     # call trap(tf), where tf=%esp
-    call trap
+    call trap  # into C 
 
     # pop the pushed stack pointer
     popl %esp
@@ -45,4 +45,16 @@ __trapret:
     # get rid of the trap number and error code
     addl $0x8, %esp
     iret
+
+.globl forkrets
+forkrets:
+    # set stack to this new process's trapframe
+    # 把 esp 指向当前进程的中断帧, 从 __trapret 开始执行到 iret 前, esp
+    # 指向了 current->tf.tf_eip, 而如果此时执行的是 initproc则
+    # current->tf.tf_eip = kernel_thread_entry, initproc->tf.tf_cs = KERNEL_CS, 所以当执# 行完 iret 后,就开始在内核中执行 kernel_thread_entry 函数了.
+    # 而 initproc->tf.tf_regs.reg_ebx = init_main,  所以在 kernl_thread_entry 中执行 
+    # “call %ebx” 后,就开始执行 initproc 的主体了.
+    
+    movl 4(%esp), %esp
+    jmp __trapret
 

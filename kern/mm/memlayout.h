@@ -84,7 +84,7 @@
 #define VPT 0xFAC00000
 
 #define KERN_STACK_PAGE 2							  // # of pages in kernel stack
-#define KERN_STACK_SIZE (KERN_STACK_PAGE * PAGE_SIZE) // sizeof kernel stack
+#define KERN_STACK_SIZE (KERN_STACK_PAGE * PAGE_SIZE) // sizeof kernel stack   8k
 
 #ifndef __ASSEMBLER__
 
@@ -165,6 +165,12 @@ typedef struct
 	list_entry_t free_list; // the list header
 	unsigned int nr_free;   //记录当前空闲页的个数; # of free pages in this free list
 } free_area_t;
+
+// for slab style kmalloc
+#define PG_slab                     2       // page frame is included in a slab
+#define SetPageSlab(page)           set_bit(PG_slab, &((page)->flags))
+#define ClearPageSlab(page)         clear_bit(PG_slab, &((page)->flags))
+#define PageSlab(page)              test_bit(PG_slab, &((page)->flags))
 
 #endif /* !__ASSEMBLER__ */
 

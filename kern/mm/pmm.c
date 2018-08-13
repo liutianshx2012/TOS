@@ -15,6 +15,7 @@
 #include <memlayout.h>
 #include <default_pmm.h>
 #include <swap.h>
+#include <kmalloc.h>
 #include <pmm.h>
 /* *
  * 全局 任务状态段ts
@@ -599,7 +600,7 @@ check_boot_pgdir(void)
     assert(page_insert(boot_pgdir, p, 0x100 + PAGE_SIZE, PTE_W) == 0);
     assert(page_ref(p) == 2);
 
-    const char *str = "tos: Hello world!!";
+    const char *str = "OS: Hello world!!";
     strcpy((void *)0x100, str);
     assert(strcmp((void *)0x100, (void *)(0x100 + PAGE_SIZE)) == 0);
 
@@ -683,6 +684,8 @@ pmm_init(void)
     check_boot_pgdir();
     //step 10-->通过自映射机制完成页表的打印输出
     print_pgdir();
+
+    kmalloc_init();
 }
 
 
@@ -779,25 +782,25 @@ print_pgdir(void)
     cprintf("--------------------- END ---------------------\n");
 }
 
-void *
-kmalloc(size_t n)
-{
-    assert(n>0 && n <1024*1024);
-    int num_pages = (n + PAGE_SIZE -1) / PAGE_SIZE;
-    struct Page *base = alloc_pages(num_pages);
-    assert(base != NULL);
-    void *ptr = page2kva(base);
+// void *
+// kmalloc(size_t n)
+// {
+//     assert(n>0 && n <1024*1024);
+//     int num_pages = (n + PAGE_SIZE -1) / PAGE_SIZE;
+//     struct Page *base = alloc_pages(num_pages);
+//     assert(base != NULL);
+//     void *ptr = page2kva(base);
 
-    return ptr;
-}
+//     return ptr;
+// }
 
-void 
-kfree(void *ptr, size_t n)
-{
-    assert(n>0 && n <1024*1024);
-    assert(ptr != NULL);
-    struct Page * base = NULL;
-    int num_pages = (n +PAGE_SIZE -1)/PAGE_SIZE;
-    base = kva2page(ptr);
-    free_pages(base,num_pages);
-}
+// void 
+// kfree(void *ptr, size_t n)
+// {
+//     assert(n>0 && n <1024*1024);
+//     assert(ptr != NULL);
+//     struct Page * base = NULL;
+//     int num_pages = (n +PAGE_SIZE -1)/PAGE_SIZE;
+//     base = kva2page(ptr);
+//     free_pages(base,num_pages);
+// }

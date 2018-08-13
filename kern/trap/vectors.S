@@ -50,6 +50,7 @@ vector8:
   jmp __alltraps
 .globl vector9
 vector9:
+  pushl $0
   pushl $9
   jmp __alltraps
 .globl vector10

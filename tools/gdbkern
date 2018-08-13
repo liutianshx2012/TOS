@@ -1,9 +1,5 @@
 file bin/kernel
 target remote :1234
-b kern_init
-b print_kerninfo
-b pmm_init
-b idt_init
-b gdt_init
-continue
+b proc_run
+b switch_to
 

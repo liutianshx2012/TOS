@@ -1,6 +1,4 @@
-PROJ	:= proj1
-EMPTY	:=
-SPACE	:= $(EMPTY) $(EMPTY)
+PROJ	:= proj4
 SLASH	:= /
 
 V       := @
@@ -25,8 +23,6 @@ endif
 ifndef QEMU
 QEMU := $(shell if which qemu-system-i386 > /dev/null; \
 	then echo 'qemu-system-i386'; exit; \
-	elif which i386-tos-elf-qemu > /dev/null; \
-	then echo 'i386-tos-elf-qemu'; exit; \
 	else \
 	echo "***" 1>&2; \
 	echo "*** Error: Couldn't find a working QEMU executable." 1>&2; \
@@ -120,7 +116,9 @@ KINCLUDE	+= kern/debug/ 		\
 			   kern/mm/ 	    \
 			   kern/libs/ 		\
 			   kern/sync/ 		\
-			   kern/fs/         
+			   kern/fs/         \
+			   kern/proc/ 		\
+			   kern/sched/		\
 
 KSRCDIR		+= kern/init 		\
 			   kern/libs 		\
@@ -129,8 +127,9 @@ KSRCDIR		+= kern/init 		\
 			   kern/trap 	    \
 			   kern/mm 			\
 			   kern/sync        \
-			   kern/fs       
-
+			   kern/fs          \
+			   kern/proc 		\
+			   kern/sched		\
 			   
 
 KCFLAGS		+= $(addprefix -I,$(KINCLUDE))

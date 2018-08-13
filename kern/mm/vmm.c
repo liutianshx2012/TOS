@@ -12,6 +12,7 @@
 #include <pmm.h>
 #include <x86.h>
 #include <swap.h>
+#include <kmalloc.h>
 #include <vmm.h>
 
 
@@ -168,10 +169,10 @@ mm_destroy(struct mm_struct *mm)
     list_entry_t *list = &(mm->mmap_list), *le;
     while ((le = list_next(list)) != list) {
         list_del(le);
-        kfree(le2vma(le, list_link),sizeof(struct vma_struct));  //kfree vma        
+        kfree(le2vma(le, list_link));        
     }
 
-    kfree(mm, sizeof(struct mm_struct)); //kfree mm
+    kfree(mm); 
     mm=NULL;
 }
 
@@ -195,18 +196,14 @@ check_vmm(void)
 
     check_pgfault();
 
-    assert(nr_free_pages_store == nr_free_pages());
-
     cprintf("check_vmm() succeeded.\n");
 }
 
 static void
 check_vma_struct(void) 
 {
-    size_t nr_free_pages_store = nr_free_pages();
-
-    struct mm_struct *mm = mm_create();
-   
+    // size_t nr_free_pages_store = nr_free_pages();
+    struct mm_struct *mm = mm_create();   
     assert(mm != NULL);
 
     int step1 = 10;
@@ -259,8 +256,6 @@ check_vma_struct(void)
     }
 
     mm_destroy(mm);
-
-    assert(nr_free_pages_store == nr_free_pages());
 
     cprintf("check_vma_struct() succeeded!\n");
 }
@@ -321,7 +316,7 @@ volatile unsigned int pgfault_num=0;
 int
 do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) 
 {
-    cprintf(" handle a page fault\n");
+    cprintf(" handle a page fault %d [0x%08lx]\n",error_code,addr);
     int ret = -E_INVAL;
     //try to find a vma which include addr
     struct vma_struct *vma = find_vma(mm, addr);
@@ -368,7 +363,6 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
     ret = -E_NO_MEM;
 
     pte_t *ptep=NULL;
-
     // try to find a pte, if pte's PT(Page Table) isn't existed, then create a PT.
     // (notice the 3th parameter '1')
     if ((ptep = get_pte(mm->pgdir, addr, 1)) == NULL) {
@@ -393,8 +387,7 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
             page_insert(mm->pgdir, page, addr, perm);
             swap_map_swappable(mm, addr, page, 1);
             page->pra_vaddr = addr;
-        }
-        else {
+        } else {
             cprintf("no swap_init_ok but ptep is %x, failed\n",*ptep);
             goto failed;
         }

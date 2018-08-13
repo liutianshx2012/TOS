@@ -9,6 +9,7 @@
 int
 main(void)
 {
+    printf("# 包括256种各中断服务例程的入口地址和第一步初步处理实现;\n# Warning此文件是由tools/verctor.c在编译 kernel 期间动态生成的;\n");
     printf(".text\n");
     printf(".globl __alltraps\n");
 

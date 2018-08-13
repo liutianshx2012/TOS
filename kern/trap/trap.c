@@ -19,7 +19,12 @@
 
 /* 初步处理后,继续完成具体的各种中断处理操作. */
 
-#define TICK_NUM 100
+#define TICK_NUM    100
+
+static volatile int in_swap_tick_event = 0;
+/* temporary trapframe or pointer to trapframe */
+extern struct mm_struct *check_mm_struct;
+
 
 static void 
 print_ticks(void)
@@ -201,8 +206,6 @@ pgfault_handler(struct trapframe *tf)
     panic("unhandled page fault.\n");
 }
 
-/* temporary trapframe or pointer to trapframe */
-extern struct mm_struct *check_mm_struct;
 /* trap_dispatch - dispatch based on what type of trap occurred */
 static void
 trap_dispatch(struct trapframe *tf)

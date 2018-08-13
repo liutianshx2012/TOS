@@ -262,7 +262,7 @@ lcr0(uintptr_t cr0)
         : "memory"
     );
 }
-
+// PDT 的起始地址
 static inline void
 lcr3(uintptr_t cr3) 
 {
