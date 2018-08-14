@@ -12,7 +12,8 @@
 #define ELF_MAGIC    0x464C457FU            // "\x7FELF" in little endian
 
 /* file header sizeof(struct elfhdr) = 52 */
-struct elfhdr {
+struct elfhdr 
+{
     uint32_t e_magic;     // must equal ELF_MAGIC
     uint8_t  e_elf[12];
     uint16_t e_type;      // 1=relocatable, 2=executable, 3=shared object, 4=core image
@@ -31,7 +32,8 @@ struct elfhdr {
 };
 
 /* program section header sizeof(struct proghdr) = 32*/
-struct proghdr {
+struct proghdr 
+{
     uint32_t p_type;   // loadable code or data, dynamic linking info,etc.
     uint32_t p_offset; // file offset of segment
     uint32_t p_va;     // virtual address to map segment
@@ -42,5 +44,11 @@ struct proghdr {
     uint32_t p_align;  // required alignment, invariably hardware page size
 };
 
+/* values for Proghdr :: p_type*/
+#define ELF_PT_LOAD     1
+/* flag bits for proghdr::p_flags*/
+#define ELF_PF_X                        1
+#define ELF_PF_W                        2
+#define ELF_PF_R                        4
 
 #endif

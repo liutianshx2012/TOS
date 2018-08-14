@@ -52,7 +52,7 @@
  * 这是随意选择的(idx)不要覆盖掉CPU定义的异常与中断号
  * */
 #define KERNEL_SWITCH_2_USER              120    // kernel switch user
-#define USER_SWITCH_2_KERNEL              220    // user switch kernel
+#define USER_SWITCH_2_KERNEL              121    // user switch kernel
 
 /* registers as pushed by pushal */
 struct pushregs {

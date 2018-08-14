@@ -1,5 +1,5 @@
 /*************************************************************************
-	> File Name: libs/atomic.h
+	> File Name: atomic.h
 	> Author:TTc 
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Tue 05 Jul 2016 03:04:10 PM CST
@@ -7,6 +7,7 @@
 #ifndef __LIBS_ATOMIC_H__
 #define __LIBS_ATOMIC_H__
 
+#include <defs.h>
 /* Atomic operations that C can't guarantee us. Useful for resource counting etc.. */
 
 static inline void set_bit(int nr, volatile void *addr) __attribute__((always_inline));
@@ -62,6 +63,33 @@ test_bit(int nr, volatile void *addr)
     __asm__ volatile ("btl %2, %1; sbbl %0,%0" : "=r" (oldbit) : "m" (*(volatile long *)addr), "Ir" (nr));
     return oldbit != 0;
 }
+
+/* *
+ * test_and_set_bit - Atomically set a bit and return its old value
+ * @nr:     the bit to set
+ * @addr:   the address to count from
+ * */
+static inline bool
+test_and_set_bit(int nr, volatile void *addr) 
+{
+    int oldbit;
+    asm volatile ("btsl %2, %1; sbbl %0, %0" : "=r" (oldbit), "=m" (*(volatile long *)addr) : "Ir" (nr) : "memory");
+    return oldbit != 0;
+}
+
+/* *
+ * test_and_clear_bit - Atomically clear a bit and return its old value
+ * @nr:     the bit to clear
+ * @addr:   the address to count from
+ * */
+static inline bool
+test_and_clear_bit(int nr, volatile void *addr) 
+{
+    int oldbit;
+    asm volatile ("btrl %2, %1; sbbl %0, %0" : "=r" (oldbit), "=m" (*(volatile long *)addr) : "Ir" (nr) : "memory");
+    return oldbit != 0;
+}
+
 
 #endif /* !__LIBS_ATOMIC_H__ */
 

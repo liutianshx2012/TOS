@@ -20,5 +20,7 @@ void *kmalloc(size_t n);
 
 void kfree(void *objp);
 
+size_t kallocated(void);
+
 
 #endif

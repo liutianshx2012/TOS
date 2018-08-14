@@ -1,4 +1,4 @@
-PROJ	:= proj4
+PROJ	:= proj5
 SLASH	:= /
 
 V       := @
@@ -79,6 +79,8 @@ include function.mk
 
 listf_cc = $(call listf,$(1),$(CTYPE))
 
+USER_PREFIX	:= __user_
+
 # for cc
 add_files_cc = $(call add_files,$(1),$(CC),$(CFLAGS) $(3),$(2),$(4))
 create_target_cc = $(call create_target,$(1),$(2),$(3),$(CC),$(CFLAGS))
@@ -93,6 +95,9 @@ asmfile = $(call cgtype,$(call toobj,$(1)),o,asm)
 outfile = $(call cgtype,$(call toobj,$(1)),o,out)
 symfile = $(call cgtype,$(call toobj,$(1)),o,sym)
 
+filename = $(basename $(notdir $(1)))
+ubinfile = $(call outfile,$(addprefix $(USER_PREFIX),$(call filename,$(1))))
+
 # for match pattern
 match = $(shell echo $(2) | $(AWK) '{for(i=1;i<=NF;i++){if(match("$(1)","^"$$(i)"$$")){exit 1;}}}'; echo $$?)
 
@@ -106,6 +111,39 @@ CFLAGS	+= $(addprefix -I,$(INCLUDE))
 LIBDIR	+= libs
 
 $(call add_files_cc,$(call listf_cc,$(LIBDIR)),libs,)
+# ------------------------------------------------------------------
+#user programs
+
+UINCLUDE	+= user/include/ \
+			   user/libs/
+
+USRCDIR		+= user
+
+ULIBDIR		+= user/libs
+
+UCFLAGS		+= $(addprefix -I,$(UINCLUDE))
+USER_BINS	:=
+
+$(call add_files_cc,$(call listf_cc,$(ULIBDIR)),ulibs,$(UCFLAGS))
+$(call add_files_cc,$(call listf_cc,$(USRCDIR)),uprog,$(UCFLAGS))
+
+UOBJS	:= $(call read_packet,ulibs libs)
+
+define uprog_ld
+__user_bin__ := $$(call ubinfile,$(1))
+USER_BINS += $$(__user_bin__)
+$$(__user_bin__): tools/user.ld
+$$(__user_bin__): $$(UOBJS)
+$$(__user_bin__): $(1) | $$$$(dir $$$$@)
+	@echo "--------------------------------"
+	@echo "build user programs~~~"
+	$(V)$(LD) $(LDFLAGS) -T tools/user.ld -o $$@ $$(UOBJS) $(1)
+	@$(OBJDUMP) -S $$@ > $$(call cgtype,$$<,o,asm)
+	@$(OBJDUMP) -t $$@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$$$/d' > $$(call cgtype,$$<,o,sym)
+	@echo "--------------------------------"
+endef
+
+$(foreach p,$(call read_packet,uprog),$(eval $(call uprog_ld,$(p))))
 
 # -------------------------------------------------------------------
 # kernel
@@ -119,6 +157,7 @@ KINCLUDE	+= kern/debug/ 		\
 			   kern/fs/         \
 			   kern/proc/ 		\
 			   kern/sched/		\
+	    	   kern/syscall/    \
 
 KSRCDIR		+= kern/init 		\
 			   kern/libs 		\
@@ -130,7 +169,7 @@ KSRCDIR		+= kern/init 		\
 			   kern/fs          \
 			   kern/proc 		\
 			   kern/sched		\
-			   
+			   kern/syscall     \
 
 KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
 
@@ -142,10 +181,11 @@ KOBJS	= $(call read_packet,kernel libs)
 kernel = $(call totarget,kernel)
 
 $(kernel): tools/kernel.ld
-$(kernel): $(KOBJS)
+$(kernel): $(KOBJS) $(USER_BINS)
 	@echo "--------------------------------"
+	@echo "build kernel elf~~~"
 	@echo + ld $@
-	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS)
+	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS) -b binary $(USER_BINS)
 	@$(OBJDUMP) -S $@ > $(call asmfile,kernel)
 	@$(OBJDUMP) -t $@ | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,kernel)
 	@echo "--------------------------------"
@@ -163,6 +203,7 @@ bootblock = $(call totarget,bootblock)
 
 $(bootblock): $(call toobj,boot/bootasm.S) $(call toobj,$(bootfiles)) | $(call totarget,sign)
 	@echo "--------------------------------"
+	@echo "build boot block ~~~"
 	@echo + ld $@
 	$(V)$(LD) $(LDFLAGS) -N -T tools/boot.ld $^ -o $(call toobj,bootblock)
 	@$(OBJDUMP) -S $(call objfile,bootblock) > $(call asmfile,bootblock)
@@ -186,10 +227,10 @@ TOSIMG	:= $(call totarget,tos.img)
 	
 $(TOSIMG): $(kernel) $(bootblock)
 	@echo "--------------------------------"
+	@echo "create tos.img ~~~"
 	$(V)dd if=/dev/zero of=$@ count=10000
 	$(V)dd if=$(bootblock) of=$@ conv=notrunc
 	$(V)dd if=$(kernel) of=$@ seek=1 conv=notrunc
-	@echo "create kernel image successed~"
 	@echo "--------------------------------"
 
 
@@ -201,11 +242,9 @@ SWAPIMG   := $(call totarget,swap.img)
 
 $(SWAPIMG):
 	@echo "--------------------------------"
+	@echo "create swap.img ~~~"
 	$(V)dd if=/dev/zero of=$@ bs=1m count=128
-	@echo "create swap image successed~"
 	@echo "--------------------------------"
-
-
 
 $(call create_target,swap.img)
 	
@@ -236,7 +275,7 @@ TERMINAL       :=bash
 debug: $(TOSIMG)
 	$(V)$(QEMU) -S -s -parallel stdio $(QEMUOPTS) -serial null &
 	$(V)sleep 20
-	$(V)$(TERMINAL) -e "$(GDB) -q -x tools/gdbboot"
+	$(V)$(TERMINAL) -e "$(GDB) -q -x tools/gdbkern"
 
 .PHONY: clean
 clean:

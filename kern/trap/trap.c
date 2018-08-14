@@ -13,8 +13,13 @@
 #include <assert.h>
 #include <console.h>
 #include <kdebug.h>
-#include <string.h>
 #include <vmm.h>
+#include <swap.h>
+#include <unistd.h>
+#include <syscall.h>
+#include <error.h>
+#include <sched.h>
+#include <sync.h>
 #include <trap.h>
 
 /* 初步处理后,继续完成具体的各种中断处理操作. */
@@ -25,6 +30,7 @@ static volatile int in_swap_tick_event = 0;
 /* temporary trapframe or pointer to trapframe */
 extern struct mm_struct *check_mm_struct;
 
+extern struct proc_struct *current;
 
 static void 
 print_ticks(void)
@@ -49,27 +55,6 @@ static struct pseudodesc idt_pd =
 void
 idt_init(void)
 {
-    /*  step 2*
-    * (1) Where are the entry addrs of each Interrupt Service Routine(ISR)?
-    *     All ISR's entry addrs are stored in __vectors.where is uintptr_t *
-    *     __vectors[]?
-    *     __vectors[] is in kern/trap/vector.S which is produced by 
-    *     tools/vector.c (try "make" command ini proj1,then you will find *
-    *     vector.S in kern/trap DIR )
-    *     You can use "extern uintptr_t __vectors[];" to define this extern 
-    *     variable which will be used later.
-    * 
-    * (2) Now you should setup the entries of ISR in Interrupt Descriptor 
-    *     Table(IDT).
-    *     can you ses idt[256] in this File? Yes, it's IDT! you can use *
-    *     SETGATE macro to setup each item of IDT.
-    *     
-    * (3) After setup the contents of IDT,You will let CPU know Where is 
-    *     the IDT by using 'lidt' instruction.
-    *     You don't know the meaning of this instruction? just goole it! 
-    *     and check the libs/x86.h to know more.
-    *     Notice: the argument of lidt is idt_pd. try to find it !
-    **/
     /**
      * 第一步,声明vertors,其中存放着中断服务程序的入口地址.这个数组生成于vertor.S中.
      * 第二步,填充中断描述符表IDT.
@@ -80,9 +65,8 @@ idt_init(void)
     for (i = 0; i < sizeof(idt) / sizeof(struct gatedesc); i++) {
         SETGATE(idt[i],0,G_D_K_TEXT, __vectors[i],DPL_KERNEL);
     }
-    /* SET for switch from user to kernel*/
-    SETGATE(idt[USER_SWITCH_2_KERNEL], 0, KERNEL_CS, __vectors
-                              [USER_SWITCH_2_KERNEL], DPL_KERNEL);
+    // 设置用于系统调用的中断门信息
+    SETGATE(idt[T_SYSCALL], 1, G_D_K_TEXT, __vectors[T_SYSCALL], DPL_USER);
 
     /*load the IDT ==> 使用 LIDT 指令加载 IDT 中断描述符表*/
     lidt(&idt_pd);
@@ -161,7 +145,7 @@ print_trapframe(struct trapframe *tf)
             cprintf("%s,", IA32flags[i]);
         }
     }
-    cprintf("IOPL====> %d\n", (tf->tf_eflags & FL_IOPL_MASK) >> 12);
+    cprintf("IOPL=%d\n", (tf->tf_eflags & FL_IOPL_MASK) >> 12);
 
     if (!trap_in_kernel(tf)) {
         cprintf("  esp  0x%08x\n", tf->tf_esp);
@@ -199,11 +183,27 @@ print_pgfault(struct trapframe *tf)
 static int 
 pgfault_handler(struct trapframe *tf) 
 {
-    print_pgfault(tf);
-    if (check_mm_struct != NULL) {
-        return do_pgfault(check_mm_struct, tf->tf_err, rcr2());
+    cprintf("pgfault_handler tf_err : [0x%08x].\n", tf->tf_err);
+
+    //used for test check_swap
+    if(check_mm_struct !=NULL) { 
+        print_pgfault(tf);
     }
-    panic("unhandled page fault.\n");
+
+    struct mm_struct *mm;
+    if (check_mm_struct != NULL) {
+        assert(current == idleproc);
+        mm = check_mm_struct;
+    } else {
+        if (current == NULL) {
+            print_trapframe(tf);
+            print_pgfault(tf);
+            panic("unhandled page fault.\n");
+        }
+        mm = current->mm;
+    }
+    cprintf("mm =>[0x%08lx]\n",mm);
+    return do_pgfault(mm, tf->tf_err, rcr2());
 }
 
 /* trap_dispatch - dispatch based on what type of trap occurred */
@@ -211,73 +211,66 @@ static void
 trap_dispatch(struct trapframe *tf)
 {
     char c;
-    int ret;
+    int ret = 0;
     switch (tf->tf_trapno) {
         case T_PGFLT : { //page fault
             if ((ret = pgfault_handler(tf)) != 0) {
                 print_trapframe(tf);
-                panic("handle pgfault failed. %e\n",ret);
+                if (current == NULL) {
+                    panic("handle pgfault failed. ret=%d\n", ret);
+                } else {
+                    if (trap_in_kernel(tf)) {
+                        panic("handle pgfault failed in kernel mode. ret=%d\n", ret);
+                    }
+                    cprintf("killed by kernel.\n");
+                    panic("handle user mode pgfault failed. ret=%d\n", ret); 
+                    do_exit(-E_KILLED);
+                }
             }
             break;
         }
-        case IRQ_OFFSET + IRQ_TIMER:  //时钟中断
+        case T_SYSCALL : {
+            syscall();
+            break;
+        }
+        case IRQ_OFFSET + IRQ_TIMER: {  //时钟中断
             ticks ++;
             if (ticks % TICK_NUM == 0) {
                 print_ticks();
+				assert(current != NULL);
+          	    current->need_resched =1;
             }
             break;
-        case IRQ_OFFSET + IRQ_COM1://串口中断,显示收到的字符
+        }
+        case IRQ_OFFSET + IRQ_COM1: { //串口中断,显示收到的字符
             c = cons_getc();
             cprintf("serial [%03d] %c\n", c, c);
             break;
-        case IRQ_OFFSET + IRQ_KBD: //键盘中断
+        }
+        case IRQ_OFFSET + IRQ_KBD: { //键盘中断
             c = cons_getc();
             cprintf("键盘中断 kbd [%03d] %c\n", c, c);
             break;
-            //proj1 CHALLENGE 1 : YOUR CODE you should modify below codes.
+        }
         case KERNEL_SWITCH_2_USER:
-        /*
-            if (tf->tf_cs != USER_CS) {
-                switchk2u = *tf;
-                switchk2u.tf_cs = USER_CS;
-                switchk2u.tf_ds = switchk2u.tf_es = switchk2u.tf_ss = USER_DS;
-                switchk2u.tf_esp = (uint32_t)tf + sizeof(struct trapframe) - 8;
-
-                // set eflags, make sure trap can use io under user mode.
-                // if CPL > IOPL, then cpu will generate a general protection.
-                switchk2u.tf_eflags |= FL_IOPL_MASK;
-
-                // set temporary stack
-                // then iret will jump to the right stack
-                *((uint32_t *)tf - 1) = (uint32_t)&switchk2u;
-            }
-            */
-            break;
-        case USER_SWITCH_2_KERNEL:
-            // cprintf("trap dispatch USER_SWITCH_2_KERNEL\n");
-            // print_trapframe(tf);
-            /*
-            if (tf->tf_cs != KERNEL_CS) {
-                tf->tf_cs = KERNEL_CS;
-                tf->tf_ds = tf->tf_es = KERNEL_DS;
-                tf->tf_eflags &= ~FL_IOPL_MASK;
-                switchu2k = (struct trapframe *)(tf->tf_esp - (sizeof(struct trapframe) - 8));
-                memmove(switchu2k, tf, sizeof(struct trapframe) - 8);
-                *((uint32_t *)tf - 1) = (uint32_t)switchu2k;
-            }
-            */
+        case USER_SWITCH_2_KERNEL: 
+            panic("_SWITCH_** ??\n");
             break;
         case IRQ_OFFSET + IRQ_IDE1:
-        case IRQ_OFFSET + IRQ_IDE2:
+        case IRQ_OFFSET + IRQ_IDE2: {
             /* do nothing */
             break;
-        default:
-            // in kernel, it must be a mistake
-            if ((tf->tf_cs & 3) == 0) {
-                print_trapframe(tf);
-                panic("unexpected trap in kernel.\n");
-            }
         }
+        default: {
+            print_trapframe(tf);
+            if (current != NULL) {
+                cprintf("unhandled trap.\n");
+                do_exit(-E_KILLED);
+            }
+            // in kernel, it must be a mistake
+            panic("unexpected trap in kernel.\n");
+        }
+    }
 }
 
 /* *trap -
@@ -289,5 +282,26 @@ void
 trap(struct trapframe *tf)
 {
     // dispatch based on what type of trap occurred
-    trap_dispatch(tf);
+    // used for previous projects
+    if (current == NULL) {
+        trap_dispatch(tf);
+    } else {
+        // keep a trapframe chain in stack
+        struct trapframe *otf = current->tf;
+        current->tf = tf;
+    
+        bool in_kernel = trap_in_kernel(tf);
+    
+        trap_dispatch(tf);
+    
+        current->tf = otf;
+        if (!in_kernel) {
+            if (current->flags & PF_EXITING) {
+                do_exit(-E_KILLED);
+            }
+            if (current->need_resched) {
+                schedule();
+            }
+        }
+    }
 }

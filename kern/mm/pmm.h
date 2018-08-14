@@ -66,6 +66,12 @@ void tlb_invalidate(pde_t *pgdir, uintptr_t la);
 
 struct Page *pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm);
 
+void unmap_range(pde_t *pgdir,uintptr_t start,uintptr_t end);
+
+void exit_range(pde_t *pgdir,uintptr_t start, uintptr_t end);
+
+int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end, bool share);
+
 void print_pgdir(void);
 /* *
  * PADDR - takes a kernel virtual address (an address that points above KERN_BASE),

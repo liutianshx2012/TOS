@@ -14,14 +14,23 @@
 void
 wakeup_proc(struct proc_struct *proc) 
 {
-    assert(proc->state != PROC_ZOMBIE && proc->state != PROC_RUNNABLE);
-    proc->state = PROC_RUNNABLE;
+    assert(proc->state != PROC_ZOMBIE); 
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        if (proc->state != PROC_RUNNABLE) {
+            proc->state = PROC_RUNNABLE;
+            proc->wait_state = 0;
+        } else {
+            warn("wakeup runnable process.\n");
+        }
+    }
+    local_intr_restore(intr_flag);
 }
 
 void
 schedule(void) 
 {
-    cprintf("cpu schedule!!\n");
     bool intr_flag;
     list_entry_t *le;
     list_entry_t *last;
@@ -36,7 +45,7 @@ schedule(void)
             if ((le = list_next(le)) != &proc_list) {
                 next = le2proc(le, list_link);
                 if (next->state == PROC_RUNNABLE) {
-                    cprintf("find a PROC_RUNNABLE =>[%s]\n",next->name);
+                    cprintf("scheduler find a PROC_RUNNABLE =>[%s]\n",next->name);
                     break;
                 }
             }

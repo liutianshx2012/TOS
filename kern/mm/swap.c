@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <memlayout.h>
+#include <default_pmm.h>
 #include <pmm.h>
 #include <mmu.h>
 #include <swap_fifo.h>
@@ -172,6 +173,8 @@ unsigned int check_swap_addr[CHECK_VALID_VIR_PAGE_NUM];
 
 extern free_area_t free_area;
 
+extern struct mm_struct *check_mm_struct;
+
 #define free_list (free_area.free_list)
 #define nr_free (free_area.nr_free)
 
@@ -194,7 +197,6 @@ check_swap(void)
     struct mm_struct *mm = mm_create();
     assert(mm != NULL);
 
-    extern struct mm_struct *check_mm_struct;
     assert(check_mm_struct == NULL);
 
     check_mm_struct = mm;
@@ -258,8 +260,13 @@ check_swap(void)
         free_pages(check_rp[i],1);
     } 
     
+	 free_page(pde2page(pgdir[0]));
+     pgdir[0] = 0;
+     mm->pgdir = NULL;
+	 
     mm_destroy(mm);
-        
+    check_mm_struct = NULL;
+    
     nr_free = nr_free_store;
     free_list = free_list_store;
     

@@ -48,9 +48,24 @@
  *                            |    Remapped Physical Memory     | RW/-- KMEMSIZE = 896MB
  *                            |                                 |
  *     KERN_BASE -----------> +---------------------------------+ 0xC0000000 (3GB)
+*                             |        Invalid Memory (*)       | --/--
+ *     USERTOP -------------> +---------------------------------+ 0xB0000000
+ *                            |           User stack            |
+ *                            +---------------------------------+
  *                            |                                 |
+ *                            :                                 :
+ *                            |         ~~~~~~~~~~~~~~~~        |
+ *                            :                                 :
  *                            |                                 |
- *                            |                                 |
+ *                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *                            |       User Program & Heap       |
+ *     UTEXT ---------------> +---------------------------------+ 0x00800000
+ *                            |        Invalid Memory (*)       | --/--
+ *                            |  - - - - - - - - - - - - - - -  |
+ *                            |    User STAB Data (optional)    |
+ *     USERBASE, USTAB------> +---------------------------------+ 0x00200000
+ *                            |        Invalid Memory (*)       | --/--
+ *     0 -------------------> +---------------------------------+ 0x00000000
  *                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * (*) Note: The kernel ensures that "Invalid Memory"(0xFAC00000 - 0xF8000000 = 
  *            0x2C00000) is never mapped. (0x2C00000 = 44MB)
@@ -86,6 +101,22 @@
 #define KERN_STACK_PAGE 2							  // # of pages in kernel stack
 #define KERN_STACK_SIZE (KERN_STACK_PAGE * PAGE_SIZE) // sizeof kernel stack   8k
 
+
+#define USERTOP             0xB0000000
+#define USTACKTOP           USERTOP
+#define USTACKPAGE          256				   //of pages in user stack
+#define USTACKSIZE    		(USTACKPAGE*PAGE_SIZE)//sizeof user stack
+
+#define USERBASE            0x00200000
+#define UTEXT               0x00800000 	       //where user programs generally begin
+#define USTAB               USERBASE		   //the location of the user STABS data structure
+
+#define USER_ACCESS(start, end)                     \
+	(USERBASE <= (start) && (start) < (end) && (end) <= USERTOP)
+
+#define KERN_ACCESS(start, end)                     \
+	(KERN_BASE <= (start) && (start) < (end) && (end) <= KERN_TOP)
+
 #ifndef __ASSEMBLER__
 
 #include <defs.h>
@@ -94,7 +125,7 @@
 
 typedef uintptr_t pte_t;	// page table entry
 typedef uintptr_t pde_t;	// page directory entry
-typedef pte_t swap_entry_t; //the pte can also be a swap entry
+typedef pte_t swap_entry_t; // the pte can also be a swap entry
 
 /*
 e820 is shorthand to refer to the facility by which the BIOS of x86-based computer systems reports the memory map to the operating system or boot loader.

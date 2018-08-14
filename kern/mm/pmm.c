@@ -263,17 +263,17 @@ page_init(void)
 
     extern char end[]; /* kernel.ld 定义 bootloader 加载 kernel elf 的结束链接地址*/
     npage = maxpa / PAGE_SIZE;
-    cprintf("\n\n max phys page frame numbers [%d]\n",npage);
+    //cprintf("\n\n max phys page frame numbers [%d]\n",npage);
     /* 管理页级物理内存空间所需的 struct Page 共占用的 内存的起始地址*/
     pages = (struct Page *)ROUNDUP((void*)end, PAGE_SIZE);
-    cprintf(" pages [%08lx] sizeof(struct Page)=%d manager mem size =>%d\n",PADDR((uintptr_t)pages),sizeof(struct Page),npage * sizeof(struct Page));
+    //cprintf(" pages [%08lx] sizeof(struct Page)=%d manager mem size =>%d\n",PADDR((uintptr_t)pages),sizeof(struct Page),npage * sizeof(struct Page));
     for (i=0;i<npage;i++) {
         SetPageReserved(pages + i);
     }
     /* 0 ~ pages + sizeof(struct Page) * npage) 之间的物理内存空间设定为 已占用的物理内存(存储了 npage 个 struct Page )  起始 0 ~~~ 640KB 是空闲的*/
     // freemem 是这时空闲空间的起始地址. 上面的 SetPageReserved 把两部分空间给标识出来,标识已占用
     uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);//0x001b8d80
-    cprintf("freemem phys addr [%08lx]\n",freemem);
+    //cprintf("freemem phys addr [%08lx]\n",freemem);
 
     for (i=0;i<memmap->nr_map;i++) {
         uint64_t begin = memmap->map[i].addr;
@@ -290,7 +290,7 @@ page_init(void)
                 end = ROUNDDOWN(end, PAGE_SIZE);
                 if (begin < end) {
                     // [001b9000, 07fe0000]
-                    cprintf("begin~end [%08llx, %08llx]\n",begin,end);
+                    //cprintf("begin~end [%08llx, %08llx]\n",begin,end);
                     // 根据探测到的空闲物理空间,设置空闲标记,获得空闲空间的起始地址和结束地址
                     init_memmap(pa2page(begin), (end - begin) / PAGE_SIZE);
                 }
@@ -485,10 +485,12 @@ pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm)
             return NULL;
         }
         if (swap_init_ok) {
-            swap_map_swappable(check_mm_struct,la,page,0);
-            page->pra_vaddr = la;
-            assert(page_ref(page)==1);
-            //cprintf("get No. %d  page: pra_vaddr %x, pra_link.prev %x, pra_link_next %x in pgdir_alloc_page\n", (page-pages), page->pra_vaddr,page->pra_page_link.prev, page->pra_page_link.next);
+            if(check_mm_struct!=NULL) {
+                swap_map_swappable(check_mm_struct,la,page,0);
+                page->pra_vaddr = la;
+                assert(page_ref(page)==1);
+                 //cprintf("get No. %d  page: pra_vaddr %x, pra_link.prev %x, pra_link_next %x in pgdir_alloc_page\n", (page-pages), page->pra_vaddr,page->pra_page_link.prev, page->pra_page_link.next);
+            } 
         } 
     }
 
@@ -505,7 +507,6 @@ check_pgdir(void)
 
     struct Page *p1, *p2;
     p1 = alloc_page();
-    cprintf("p1 ==>[%08lx]\n",p1);
     assert(page_insert(boot_pgdir, p1, 0x0, 0) == 0);
 
     pte_t *ptep;
@@ -640,33 +641,33 @@ pmm_init(void)
     // create boot_pgdir, an initial page directory(Page Directory Table, PDT)
     boot_pgdir = boot_alloc_page();
     memset(boot_pgdir, 0, PAGE_SIZE);//4kb
-    cprintf("boot_pgdir  virtual addr ==>[%08lx]\n",boot_pgdir);//c01b9000
+    //cprintf("boot_pgdir  virtual addr ==>[%08lx]\n",boot_pgdir);//c01b9000
     boot_cr3 = PADDR(boot_pgdir);
-    cprintf("boot_cr3 physical addr ==>[%08lx]\n",boot_cr3);//001b9000
+    //cprintf("boot_cr3 physical addr ==>[%08lx]\n",boot_cr3);//001b9000
     // c01b9000(virtual addr) - 001b9000(physical addr)  = 0xC0000000 stage 2 映射关系
 
     check_pgdir();
 
     static_assert(KERN_BASE % PT_SIZE == 0 && KERN_TOP % PT_SIZE == 0);
-    cprintf("Test passed \n");
+    
 
 
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
     cprintf("VPT(virtual page table) page directory index ==>%d \n",PDX(VPT));
-    cprintf("000 boot_pgdir ==>[%08lx]\n",boot_pgdir);
+    
     boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;//PDX(VPT) = 1003
-    cprintf("111 boot_pgdir ==>[%08lx] \n",boot_pgdir);
+   
     // step 5--> 建立一一映射关系的二级页表
     // map all physical memory to linear memory with base linear addr KERN_BASE
     //linear_addr KERN_BASE~KERN_BASE+KMEMSIZE = phy_addr 0~KMEMSIZE
     //But shouldn't use this map until enable_paging() & gdt_init() finished.
     boot_map_segment(boot_pgdir, KERN_BASE, KMEMSIZE, 0, PTE_W);
-    cprintf("222 boot_pgdir ==>[%08lx]\n",boot_pgdir);
+    
 
     //temporary map:
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M
-    cprintf("page directory index ==>%d \n",PDX(KERN_BASE));
+    cprintf("page directory index[%d] \n",PDX(KERN_BASE));
     boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768
     // step 6--> 使能分页机制
     enable_paging();
@@ -737,6 +738,106 @@ get_pgtable_items(size_t left, size_t right, size_t start, uintptr_t *table, siz
     return 0;
 }
 
+void
+unmap_range(pde_t *pgdir, uintptr_t start, uintptr_t end) 
+{
+    assert(start % PAGE_SIZE == 0 && end % PAGE_SIZE == 0);
+    assert(USER_ACCESS(start,end));
+    do {
+        pte_t *ptep = get_pte(pgdir, start,0);
+        if (ptep == NULL) {
+            start = ROUNDDOWN(start + PT_SIZE,PT_SIZE);
+            continue;
+        }
+        if (*ptep != 0) {
+            page_remove_pte(pgdir,start,ptep);
+        }
+
+        start += PAGE_SIZE;
+
+    } while (start != 0 && start < end);
+}
+
+void
+exit_range(pde_t *pgdir, uintptr_t start, uintptr_t end) 
+{
+    assert(start %PAGE_SIZE == 0 && end % PAGE_SIZE == 0);
+    assert(USER_ACCESS(start,end));
+
+    start = ROUNDDOWN(start,PT_SIZE);
+    do {
+        int pde_idx = PDX(start);
+        if (pgdir[pde_idx] & PTE_P) {
+            free_page(pde2page(pgdir[pde_idx]));
+            pgdir[pde_idx] = 0;
+        }
+        start += PT_SIZE;
+    } while (start !=0 && start <end);
+}
+/* copy_range - copy content of memory (start, end) of one process A to another process B
+ * @to:    the addr of process B's Page Directory
+ * @from:  the addr of process A's Page Directory
+ * @share: flags to indicate to dup OR share. We just use dup method, so it didn't be used.
+ *
+ * CALL GRAPH: copy_mm-->dup_mmap-->copy_range
+ */
+int
+copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end, bool share) 
+{
+    assert(start % PAGE_SIZE ==0 && end % PAGE_SIZE == 0);
+    assert(USER_ACCESS(start,end));
+    //copy content by page unit.
+    do {
+        // call get_pte to find process A's pte according to the addr start
+        pte_t *ptep = get_pte(from, start, 0), *nptep;
+        if (ptep == NULL) {
+            start = ROUNDDOWN(start + PT_SIZE, PT_SIZE);
+            continue;
+        }
+        // call get_pte to find process B's pte according to the addr start. 
+        // If pte is NULL, just alloc a PT
+        if (*ptep & PTE_P) {
+            if ((nptep = get_pte(to,start,1)) == NULL) {
+                return -E_NO_MEM;
+            }
+            uint32_t perm = (*ptep & PTE_USER);
+            /*get page from ptep*/
+            struct Page *page = pte2page(*ptep);
+            /*alloc a page for process B*/
+            struct Page *npage = alloc_page();
+            assert(page != NULL);
+            assert(npage != NULL);
+            int ret = 0;
+            /* 
+            * replicate content of page to npage, build the map of phy addr of nage with the linear addr start
+            * (1) find src_kvaddr: the kernel virtual address of page
+            * (2) find dst_kvaddr: the kernel virtual address of npage
+            * (3) memory copy from src_kvaddr to dst_kvaddr, size is PAGE_SIZE
+            * (4) build the map of phy addr of  nage with the linear addr start
+            */
+            void *kva_src = page2kva(page);
+            void * kva_dst = page2kva(npage);
+
+            memcpy(kva_dst, kva_src, PAGE_SIZE);
+
+            ret = page_insert(to,npage,start,perm);
+            assert(ret == 0);
+        }
+
+        start += PAGE_SIZE;
+
+    } while(start !=0 && start < end);
+    
+    return 0;
+}
+
+
+
+
+
+
+
+
 //print_pgdir - print the PDT & PT
 // 页表自映射方式完成对整个 PDT & PT 的内容扫描和打印. 
 // waring: 这里不会出现某个 PT 的 virtual addr 与 PDT 的 virtual addr 相同的情况.
@@ -781,26 +882,3 @@ print_pgdir(void)
     }
     cprintf("--------------------- END ---------------------\n");
 }
-
-// void *
-// kmalloc(size_t n)
-// {
-//     assert(n>0 && n <1024*1024);
-//     int num_pages = (n + PAGE_SIZE -1) / PAGE_SIZE;
-//     struct Page *base = alloc_pages(num_pages);
-//     assert(base != NULL);
-//     void *ptr = page2kva(base);
-
-//     return ptr;
-// }
-
-// void 
-// kfree(void *ptr, size_t n)
-// {
-//     assert(n>0 && n <1024*1024);
-//     assert(ptr != NULL);
-//     struct Page * base = NULL;
-//     int num_pages = (n +PAGE_SIZE -1)/PAGE_SIZE;
-//     base = kva2page(ptr);
-//     free_pages(base,num_pages);
-// }
