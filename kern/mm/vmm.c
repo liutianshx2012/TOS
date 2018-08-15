@@ -185,7 +185,7 @@ int
 mm_map(struct mm_struct *mm, uintptr_t addr, size_t len, uint32_t vm_flags, 
                             struct vma_struct **vma_store) 
 {
-    cprintf("mm_map mm [%08lx] [%08lx] [%08lx] [%08lx]\n",mm,addr,len,vma_store);
+    cprintf("mm_map mm [%08lx] [%08lx] [%08lx\n",mm,addr,len);
     uintptr_t start = ROUNDDOWN(addr,PAGE_SIZE);
     uintptr_t end = ROUNDUP(addr+ len, PAGE_SIZE);
     cprintf("start~end [%08lx] [%08lx]\n",start,end);

@@ -9,6 +9,12 @@
 #include <stab.h>
 #include <stdio.h>
 #include <string.h>
+#include <memlayout.h>
+#include <sync.h>
+#include <vmm.h>
+#include <proc.h>
+#include <kmonitor.h>
+#include <assert.h>
 #include <kdebug.h>
 
 /* kernel -debug  提供源码和二进制对应关系的查询功能,用于显示调用栈关系.*/
@@ -29,6 +35,14 @@ struct eipdebuginfo
     int eip_fn_namelen;                     // length of function's name
     uintptr_t eip_fn_addr;                  // start address of function
     int eip_fn_narg;                        // number of function arguments
+};
+
+/* user STABS data structure  */
+struct userstabdata {
+    const struct stab *stabs;
+    const struct stab *stab_end;
+    const char *stabstr;
+    const char *stabstr_end;
 };
 
 /* *
@@ -137,10 +151,40 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info)
     info->eip_fn_addr = addr;
     info->eip_fn_narg = 0;
 
-    stabs = __STAB_BEGIN__;
-    stab_end = __STAB_END__;
-    stabstr = __STABSTR_BEGIN__;
-    stabstr_end = __STABSTR_END__;
+    if (addr >= KERN_BASE) {
+        stabs = __STAB_BEGIN__;
+        stab_end = __STAB_END__;
+        stabstr = __STABSTR_BEGIN__;
+        stabstr_end = __STABSTR_END__;
+    }
+    else {
+        // user-program linker script, tools/user.ld puts the information about the
+        // program's stabs (included __STAB_BEGIN__, __STAB_END__, __STABSTR_BEGIN__,
+        // and __STABSTR_END__) in a structure located at virtual address USTAB.
+        const struct userstabdata *usd = (struct userstabdata *)USTAB;
+
+        // make sure that debugger (current process) can access this memory
+        struct mm_struct *mm;
+        if (current == NULL || (mm = current->mm) == NULL) {
+            return -1;
+        }
+        if (!user_mem_check(mm, (uintptr_t)usd, sizeof(struct userstabdata), 0)) {
+            return -1;
+        }
+
+        stabs = usd->stabs;
+        stab_end = usd->stab_end;
+        stabstr = usd->stabstr;
+        stabstr_end = usd->stabstr_end;
+
+        // make sure the STABS and string table memory is valid
+        if (!user_mem_check(mm, (uintptr_t)stabs, (uintptr_t)stab_end - (uintptr_t)stabs, 0)) {
+            return -1;
+        }
+        if (!user_mem_check(mm, (uintptr_t)stabstr, stabstr_end - stabstr, 0)) {
+            return -1;
+        }
+    }
 
     // String table validity checks
     if (stabstr_end <= stabstr || stabstr_end[-1] != 0) {

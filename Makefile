@@ -252,13 +252,6 @@ $(call create_target,swap.img)
 
 $(call finish_all)
 
-IGNORE_ALLDEPS	= gdb \
-				  clean \
-
-ifeq ($(call match,$(MAKECMDGOALS),$(IGNORE_ALLDEPS)),0)
--include $(ALLDEPS)
-endif
-
 # files for grade script
 
 targets: $(TARGETS)

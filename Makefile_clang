@@ -78,6 +78,8 @@ TARGETS	:=
 
 listf_cc = $(call listf,$(1),$(CTYPE))
 
+USER_PREFIX	:= __user_
+
 # for cc
 add_files_cc = $(call add_files,$(1),$(CC),$(CFLAGS) $(3),$(2),$(4))
 create_target_cc = $(call create_target,$(1),$(2),$(3),$(CC),$(CFLAGS))
@@ -92,6 +94,9 @@ asmfile = $(call cgtype,$(call toobj,$(1)),o,asm)
 outfile = $(call cgtype,$(call toobj,$(1)),o,out)
 symfile = $(call cgtype,$(call toobj,$(1)),o,sym)
 
+filename = $(basename $(notdir $(1)))
+ubinfile = $(call outfile,$(addprefix $(USER_PREFIX),$(call filename,$(1))))
+
 # for match pattern
 match = $(shell echo $(2) | $(AWK) '{for(i=1;i<=NF;i++){if(match("$(1)","^"$$(i)"$$")){exit 1;}}}'; echo $$?)
 
@@ -105,27 +110,65 @@ CFLAGS	+= $(addprefix -I,$(INCLUDE))
 LIBDIR	+= libs
 
 $(call add_files_cc,$(call listf_cc,$(LIBDIR)),libs,)
+# ------------------------------------------------------------------
+#user programs
+
+UINCLUDE	+= user/include/ \
+			   user/libs/
+
+USRCDIR		+= user
+
+ULIBDIR		+= user/libs
+
+UCFLAGS		+= $(addprefix -I,$(UINCLUDE))
+USER_BINS	:=
+
+$(call add_files_cc,$(call listf_cc,$(ULIBDIR)),ulibs,$(UCFLAGS))
+$(call add_files_cc,$(call listf_cc,$(USRCDIR)),uprog,$(UCFLAGS))
+
+UOBJS	:= $(call read_packet,ulibs libs)
+
+define uprog_ld
+__user_bin__ := $$(call ubinfile,$(1))
+USER_BINS += $$(__user_bin__)
+$$(__user_bin__): tools/user.ld
+$$(__user_bin__): $$(UOBJS)
+$$(__user_bin__): $(1) | $$$$(dir $$$$@)
+	@echo "--------------------------------"
+	@echo "build user programs~~~"
+	$(V)$(LD) $(LDFLAGS) -T tools/user.ld -o $$@ $$(UOBJS) $(1)
+	@$(OBJDUMP) -S $$@ > $$(call cgtype,$$<,o,asm)
+	@$(OBJDUMP) -t $$@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$$$/d' > $$(call cgtype,$$<,o,sym)
+	@echo "--------------------------------"
+endef
+
+$(foreach p,$(call read_packet,uprog),$(eval $(call uprog_ld,$(p))))
 
 # -------------------------------------------------------------------
 # kernel
 
-KINCLUDE	+= kern/debug/ \
-			   kern/driver/ \
-			   kern/trap/ \
-			   kern/mm/ \
-			   kern/libs/ \
-			   kern/sync/  \
-			   kern/fs/         
+KINCLUDE	+= kern/debug/ 		\
+			   kern/driver/ 	\
+			   kern/trap/ 		\
+			   kern/mm/ 	    \
+			   kern/libs/ 		\
+			   kern/sync/ 		\
+			   kern/fs/         \
+			   kern/proc/ 		\
+			   kern/sched/		\
+	    	   kern/syscall/    \
 
-KSRCDIR		+= kern/init \
-			   kern/libs \
-			   kern/debug \
-			   kern/driver \
-			   kern/trap \
-			   kern/mm \
-			   kern/sync \
-			   kern/fs/         
-
+KSRCDIR		+= kern/init 		\
+			   kern/libs 		\
+			   kern/debug	    \
+			   kern/driver 	    \
+			   kern/trap 	    \
+			   kern/mm 			\
+			   kern/sync        \
+			   kern/fs          \
+			   kern/proc 		\
+			   kern/sched		\
+			   kern/syscall     \
 
 KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
 
@@ -137,11 +180,11 @@ KOBJS	= $(call read_packet,kernel libs)
 kernel = $(call totarget,kernel)
 
 $(kernel): tools/kernel.ld
-
-$(kernel): $(KOBJS)
+$(kernel): $(KOBJS) $(USER_BINS)
 	@echo "--------------------------------"
+	@echo "build kernel elf~~~"
 	@echo + ld $@
-	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS)
+	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS) -b binary $(USER_BINS)
 	@$(OBJDUMP) -S $@ > $(call asmfile,kernel)
 	@$(OBJDUMP) -t $@ | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,kernel)
 	@echo "--------------------------------"
@@ -156,15 +199,17 @@ $(foreach f,$(bootfiles),$(call cc_compile,$(f),$(CC),$(CFLAGS) -Os -nostdinc))
 
 bootblock = $(call totarget,bootblock)
 
-$(bootblock): $(call toobj,$(bootfiles)) | $(call totarget,sign)
+
+$(bootblock): $(call toobj,boot/bootasm.S) $(call toobj,$(bootfiles)) | $(call totarget,sign)
 	@echo "--------------------------------"
+	@echo "build boot block ~~~"
 	@echo + ld $@
-	$(V)$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 $^ -o $(call toobj,bootblock)
+	$(V)$(LD) $(LDFLAGS) -N -T tools/boot.ld $^ -o $(call toobj,bootblock)
 	@$(OBJDUMP) -S $(call objfile,bootblock) > $(call asmfile,bootblock)
-	@$(OBJDUMP) -t $(call objfile,bootblock) | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,bootblock)
 	@$(OBJCOPY) -S -O binary $(call objfile,bootblock) $(call outfile,bootblock)
 	@$(call totarget,sign) $(call outfile,bootblock) $(bootblock)
 	@echo "--------------------------------"
+
 
 $(call create_target,bootblock)
 
@@ -175,16 +220,18 @@ $(call add_files_host,tools/sign.c,sign,sign)
 $(call create_target_host,sign,sign)
 
 # -------------------------------------------------------------------
+
 # create tos.img
 TOSIMG	:= $(call totarget,tos.img)
 	
 $(TOSIMG): $(kernel) $(bootblock)
 	@echo "--------------------------------"
+	@echo "create tos.img ~~~"
 	$(V)dd if=/dev/zero of=$@ count=10000
 	$(V)dd if=$(bootblock) of=$@ conv=notrunc
 	$(V)dd if=$(kernel) of=$@ seek=1 conv=notrunc
-	@echo "create kernel image successed~"
 	@echo "--------------------------------"
+
 
 $(call create_target,tos.img)
 
@@ -194,13 +241,14 @@ SWAPIMG   := $(call totarget,swap.img)
 
 $(SWAPIMG):
 	@echo "--------------------------------"
+	@echo "create swap.img ~~~"
 	$(V)dd if=/dev/zero of=$@ bs=1m count=128
-	@echo "create swap image successed~"
 	@echo "--------------------------------"
 
 $(call create_target,swap.img)
 	
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
 
 $(call finish_all)
 

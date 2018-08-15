@@ -1,4 +1,6 @@
-# boot
-# kernel
-# physical memory | page 
-# virtual memory 
+# boot block
+# kernel elf
+# physical memory | page frame
+# virtual memory  | page 
+# kernel process | thread 
+# user process | thread

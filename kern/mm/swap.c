@@ -260,7 +260,7 @@ check_swap(void)
         free_pages(check_rp[i],1);
     } 
     
-	 free_page(pde2page(pgdir[0]));
+	 free_page(pa2page(pgdir[0]));
      pgdir[0] = 0;
      mm->pgdir = NULL;
 	 

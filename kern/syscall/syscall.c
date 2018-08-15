@@ -81,15 +81,15 @@ sys_pgdir(uint32_t arg[])
 
 static int (*syscalls[])(uint32_t arg[]) = 
 {
-    [SYS_exit]              sys_exit,
-    [SYS_fork]              sys_fork,
-    [SYS_wait]              sys_wait,
-    [SYS_exec]              sys_exec,
-    [SYS_yield]             sys_yield,
-    [SYS_kill]              sys_kill,
-    [SYS_getpid]            sys_getpid,
-    [SYS_putc]              sys_putc,
-    [SYS_pgdir]             sys_pgdir,
+    [SYS_exit]      =       sys_exit,
+    [SYS_fork]      =       sys_fork,
+    [SYS_wait]      =       sys_wait,
+    [SYS_exec]      =       sys_exec,
+    [SYS_yield]     =       sys_yield,
+    [SYS_kill]      =       sys_kill,
+    [SYS_getpid]    =       sys_getpid,
+    [SYS_putc]      =       sys_putc,
+    [SYS_pgdir]     =       sys_pgdir,
 };
 
 
