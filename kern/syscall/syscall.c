@@ -108,6 +108,7 @@ syscall(void)
             arg[2] = tf->tf_regs.reg_ebx;
             arg[3] = tf->tf_regs.reg_edi;
             arg[4] = tf->tf_regs.reg_esi;
+            // cprintf("syscall cmd [%d] [0x%08lx][0x%08lx][0x%08lx][0x%08lx][0x%08lx]\n",num, arg[0],arg[1],arg[2],arg[3],arg[4]);
             tf->tf_regs.reg_eax = syscalls[num](arg);
             return ;
         }

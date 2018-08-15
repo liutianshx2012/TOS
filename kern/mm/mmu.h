@@ -304,29 +304,29 @@ struct taskstate {
 // | Page Directory |   Page Table   | Offset within Page  |
 // |      Index     |     Index      |                     |
 // +----------------+----------------+---------------------+
-//  \--- PDX(la) --/ \--- PTX(la) --/ \---- PG_OFF(la) ----/
-//  \----------- PAGE_PHY_N(la) -----/
+// \--- PDE_X(la) --/\--- PTE_X(la) -/\---- PG_OFF(la) ----/
+// \----------- PAGE_PHY_N(la) ------/
 //
 //  1024 PDE * 1024 PTE = 2^20 Pages = 1M Pages , 这部分需要占用的内存大小为 
 //
-// The PDX, PTX, PG_OFF, and PAGE_PHY_N macros decompose linear addresses as shown.
-// To construct a linear address la from PDX(la), PTX(la), and PG_OFF(la),
-// use PG_ADDR(PDX(la), PTX(la), PG_OFF(la)).
+// The PDE_X, PTE_X, PG_OFF, and PAGE_PHY_N macros decompose linear addresses as shown.
+// To construct a linear address la from PDE_X(la), PTE_X(la), and PG_OFF(la),
+// use PG_ADDR(PDE_X(la), PTE_X(la), PG_OFF(la)).
 
 //the index of page directory entry of VIRTUAL ADDRESS la 0x3FF = 0011 1111 1111
-#define PDX(la) ((((uintptr_t)(la)) >> PDX_SHIFT) & 0x3FF) // offset = 22 = PDX_SHIFT
+#define PDE_X(la) ((((uintptr_t)(la)) >> PDE_X_SHIFT) & 0x3FF) // offset = 22 = PDE_X_SHIFT
 
 // page table index
-#define PTX(la) ((((uintptr_t)(la)) >> PTX_SHIFT) & 0x3FF)// offset = 12 = PTX_SHIFT
+#define PTE_X(la) ((((uintptr_t)(la)) >> PTE_X_SHIFT) & 0x3FF)// offset = 12 = PTE_X_SHIFT
 
 // page number field of address (linear addr) 线性地址的 高20bit 页表的索引值
-#define PAGE_PHY_N(la) (((uintptr_t)(la)) >> PTX_SHIFT)
+#define PAGE_PHY_N(la) (((uintptr_t)(la)) >> PTE_X_SHIFT)
 
 // offset in page 0xFFF = 1111 1111 1111
 #define PG_OFF(la) (((uintptr_t)(la)) & 0xFFF)
 
 // construct linear address from indexes and offset
-#define PG_ADDR(d, t, o) ((uintptr_t)((d) << PDX_SHIFT | (t) << PTX_SHIFT | (o)))
+#define PG_ADDR(d, t, o) ((uintptr_t)((d) << PDE_X_SHIFT | (t) << PTE_X_SHIFT | (o)))
 
 // (physical)address in page table or page directory entry 高20位就是页表的索引
 // [32bit= 0xFFFFffff] ~0xFFF=0xFFFFf000=1111 1111 1111 1111 1111 0000 0000 0000
@@ -343,8 +343,8 @@ struct taskstate {
 #define PT_SIZE          (PAGE_SIZE * N_PTE_ENTRY)    // bytes mapped by a page directory entry  4kb * 1024 = 4 MB ,Page Diectory Entry 占 4MB 内存大小
 #define PT_SHIFT         22                      // log2(PT_SIZE)
 
-#define PTX_SHIFT        12                      // offset of PTX in a linear address
-#define PDX_SHIFT        22                      // offset of PDX in a linear address
+#define PTE_X_SHIFT        12                      // offset of PTE_X in a linear address
+#define PDE_X_SHIFT        22                      // offset of PDE_X in a linear address
 
 /* page table/directory entry flags */
 #define PTE_P           0x001                   // Present

@@ -39,7 +39,7 @@ struct mm_struct
 {
     list_entry_t mmap_list;        // linear list link which sorted by start addr of vma, 链接所有属于 同一 PDT 的 vma 
     struct vma_struct *mmap_cache; // current accessed vma, used for speed purpose
-    pde_t *pgdir;                  // the PDT of these vma
+    pde_t *pgdir;                  // the PDT of these vma, 虚拟地址(指向 PDT)
     int map_count;                 // the count of these vma in mmap_list,  
     void *sm_priv;                 // the private data for swap manager
 	int mm_count;                  // the number of process which shared the mm

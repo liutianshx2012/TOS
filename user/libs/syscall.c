@@ -23,18 +23,19 @@ syscall(int num, ...)
     }
     va_end(ap);
     
-    asm volatile (
-                "int %1;"
-                : "=a" (ret)
-                : "i" (T_SYSCALL),
-                  "a" (num),
-                  "d" (a[0]),
-                  "c" (a[1]),
-                  "b" (a[2]),
-                  "D" (a[3]),
-                  "S" (a[4])
-                : "cc", "memory"
-        );
+    __asm__ volatile (
+        "int %1;"
+        : "=a" (ret)
+        : "i" (T_SYSCALL),
+            "a" (num),
+            "d" (a[0]),
+            "c" (a[1]),
+            "b" (a[2]),
+            "D" (a[3]),
+            "S" (a[4])
+        : "cc", "memory"
+    );
+
     return ret;
 }
 

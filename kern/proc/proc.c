@@ -298,6 +298,9 @@ put_kstack(struct proc_struct *proc)
 }
 
 // setup_pgdir - alloc one page as PDT
+// 申请一个 PDT 所需的一个 page 内存,并把描述 kernel 虚拟空间映射的 内核 PT(boot_pgdir所指)
+// 的内容 copy 到此新 PDT 中, 最后让 mm->pgdir 指向此 PDT (该进程的新的 PDT),且能够正确映射
+// 内核虚拟空间.
 static int
 setup_pgdir(struct mm_struct *mm) 
 {
@@ -307,12 +310,14 @@ setup_pgdir(struct mm_struct *mm)
     }
     pde_t *pgdir = page2kva(page);
     memcpy(pgdir, boot_pgdir, PAGE_SIZE);
-    pgdir[PDX(VPT)] = PADDR(pgdir) | PTE_P | PTE_W;
+    pgdir[PDE_X(VPT)] = PADDR(pgdir) | PTE_P | PTE_W;
     mm->pgdir = pgdir;
+
     return 0;
 }
 
 // put_pgdir - free the memory space of PDT
+// 释放当前进程的 PDT 所占的内存
 static void
 put_pgdir(struct mm_struct *mm) 
 {
@@ -477,10 +482,12 @@ bad_fork_cleanup_proc:
 //   1. call exit_mmap & put_pgdir & mm_destroy to free the almost all memory space of processπ
 //   2. set process' state as PROC_ZOMBIE, then call wakeup_proc(parent) to ask parent reclaim itself.
 //   3. call scheduler to switch to other process
-// 释放进程自身所占内存空间和相关内存管理(PT)信息所占内存,唤醒父进程, 好让父进程收了自己,让调度器切换到其它进程
+// 释放进程自身所占内存空间和相关内存管理(PT)信息所占内存,
+// 唤醒父进程, 好让父进程收了自己,让调度器切换到其它进程.
 int
 do_exit(int error_code) 
 {
+    cprintf("do_exit error_code [%d]\n",error_code);
     if (current == idleproc) {
         panic("idleproc exit.\n");
     }
@@ -490,16 +497,19 @@ do_exit(int error_code)
 
     struct mm_struct *mm = current->mm;
     if (mm != NULL) {
-
+        // 切换到内核态的 PT 上,这样当前用户进程目前只能在内核虚拟地址空间执行了,这是为了
+        // 确保后续释放用户态内存 和 用户态 PT 的工作能够正常执行.
         lcr3(boot_cr3);
-
+        // 当前进程 mm 的引用计数为 0 表示没有其它进程共享,可以彻底释放进程所占的用户虚拟空间了。
         if (mm_count_dec(mm) == 0) {
             exit_mmap(mm);
             put_pgdir(mm);
             mm_destroy(mm);
         }
+        // 表示当前进程相关的用户虚拟内存空间 和 对应的内存管理成员变量所占内核虚拟内存空间 已经回收完毕.
         current->mm = NULL;
     }
+    // 当前进程已经不能再被调度器 调度执行
     current->state = PROC_ZOMBIE;
     current->exit_code = error_code;
 
@@ -507,12 +517,16 @@ do_exit(int error_code)
     struct proc_struct *proc;
     local_intr_save(intr_flag);
     {
+        // 如果当前进程的父进程处于等待子进程状态则唤醒父进程,让父进程帮子进程完成最后的资源回收.
         proc = current->parent;
         if (proc->wait_state == WT_CHILD) {
             wakeup_proc(proc);
         }
+        // 如果当前进程还有子进程,则需要把这些子进程的父进程指针设置为 内核线程 initproc(现代 OS 
+        // 的 init 进程),且各个子进程指针需要插入到 initproc 的子进程链表中。 
+        // 如果某个子进程的执行状态是 PROC_ZOMBIE,则需要唤醒 initproc 来完成对此子进程的最后回收
         while (current->cptr != NULL) {
-            proc =current->cptr;
+            proc = current->cptr;
             current->cptr = proc->optr;
 
             proc->yptr = NULL;
@@ -529,7 +543,7 @@ do_exit(int error_code)
         }
     }
     local_intr_restore(intr_flag);
-
+    // 重新选择新的 process 调度执行
     schedule();
     panic("do_exit will not return!! %d.\n", current->pid);
 }
@@ -543,22 +557,23 @@ do_yield(void)
     return 0;
 }
 
-/* load_icode - load the content of binary program(ELF format) as the new content of current process
+/* load_elf - load the content of binary program(ELF format) as the new content of current process
  * @binary:  the memory addr of the content of binary program
  * @size:  the size of the content of binary program
  * 完成加载放在内存中的执行程序到进程空间,涉及对页表的修改,分配用户栈.
  */
 static int
-load_icode(unsigned char *binary, size_t size) 
+load_elf(unsigned char *binary, size_t size) 
 {
-    cprintf("load use ELF [%s] size [%d]\n",binary,size);
+    // cprintf("load use ELF [%s] size [%d]\n",binary,size);
     if (current->mm != NULL) {
-        panic("load_icode: current->mm must be empty.\n");
+        panic("load_elf: current->mm must be empty.\n");
     }
 
     int ret = -E_NO_MEM;
     struct mm_struct *mm;
     //(1) create a new mm for current process
+    // 申请进程的内存管理数据结构 mm 所需内存空间.
     if ((mm = mm_create()) == NULL) {
         goto bad_mm;
     }
@@ -568,6 +583,10 @@ load_icode(unsigned char *binary, size_t size)
         goto bad_pgdir_cleanup_mm;
     }
 
+    // 根据执行程序各个段的大小分配物理内存空间,并根据执行程序各个段的起始位置确定虚拟地址,并在 PT 中
+    // 建立好 pa 与 va 的映射关系.
+    // 然后把执行程序各个段的内容 copy 到相应的内核虚拟地址中,至此 执行程序的代码与数据根据编译时设定
+    // 地址(va) 放置到了虚拟内存中.
     //(3) copy TEXT/DATA section, build BSS parts in binary to memory space of process
     struct Page *page;
     //(3.1) get the file header of the bianry program (ELF format)
@@ -596,11 +615,18 @@ load_icode(unsigned char *binary, size_t size)
         }
     //(3.5) call mm_map fun to setup the new vma ( ph->p_va, ph->p_memsz)
         vm_flags = 0, perm = PTE_U;
-        if (ph->p_flags & ELF_PF_X) vm_flags |= VM_EXEC;
-        if (ph->p_flags & ELF_PF_W) vm_flags |= VM_WRITE;
-        if (ph->p_flags & ELF_PF_R) vm_flags |= VM_READ;
-        if (vm_flags & VM_WRITE) perm |= PTE_W;
-        
+        if (ph->p_flags & ELF_PF_X) {
+            vm_flags |= VM_EXEC;
+        }
+        if (ph->p_flags & ELF_PF_W) {
+            vm_flags |= VM_WRITE;
+        }
+        if (ph->p_flags & ELF_PF_R) {
+            vm_flags |= VM_READ;
+        }
+        if (vm_flags & VM_WRITE) {
+            perm |= PTE_W;
+        }
         ret = mm_map(mm, ph->p_va, ph->p_memsz, vm_flags, NULL);
 
         if (ret!= 0) {
@@ -656,22 +682,31 @@ load_icode(unsigned char *binary, size_t size)
     }
 
     //(4) build user stack memory
+    // 需要给用户进程设置用户栈,为此调用 mm_mmap 函数建立用户栈的 vma struct,明确用户栈的位置在
+    // 用户虚空间的顶端, 大小为 256 个 Page ,(256 * 4k = 1MB),并分配一定数量的物理内存且建立
+    // 好栈的 va <~~~~> pa 映射关系.
     vm_flags = VM_READ | VM_WRITE | VM_STACK;
-    if ((ret = mm_map(mm, USTACKTOP - USTACKSIZE, USTACKSIZE, vm_flags, NULL)) != 0) {
+    if ((ret = mm_map(mm, USER_STACK_TOP - USER_STACK_SIZE, USER_STACK_SIZE, vm_flags, NULL)) != 0) {
         goto bad_cleanup_mmap;
     }
-    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-PAGE_SIZE , PTE_USER) != NULL);
-    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-2*PAGE_SIZE , PTE_USER) != NULL);
-    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-3*PAGE_SIZE , PTE_USER) != NULL);
-    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-4*PAGE_SIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USER_STACK_TOP-PAGE_SIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USER_STACK_TOP-2*PAGE_SIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USER_STACK_TOP-3*PAGE_SIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USER_STACK_TOP-4*PAGE_SIZE , PTE_USER) != NULL);
 
-    //(5) set current process's mm, sr3, and set CR3 reg = physical addr of Page Directory
+    //(5) set current process's mm, cr3, and set CR3 reg = physical addr of Page Directory
+    // 至此,进程内的内存管理 vma 和 mm 已经构建完成,于是把 mm->pgdir 赋值 cr3 reg 中,即更新了
+    // 用户进程的虚拟内存空间,此时的 initproc 已经被 hello 的代码和数据覆盖,成为了第一个用户进程,
+    // 但此时这个用户进程的执行现场还没建立好;
     mm_count_inc(mm);
     current->mm = mm;
     current->cr3 = PADDR(mm->pgdir);
     lcr3(PADDR(mm->pgdir));
 
     //(6) setup trapframe for user environment
+    // 先清空进程的中断帧,再重新设置进程的中断帧,使得在执行中断返回指令 “iret”后,能够让 CPU 转到
+    // 用户态特权级, 并回到用户态内存空间,使用用户空间的代码段、数据段和 堆栈, 且能够跳转到用户进程
+    // 的第一条指令执行,并确保在用户态能够响应中断;
     struct trapframe *tf = current->tf;
     memset(tf, 0, sizeof(struct trapframe));
 
@@ -680,16 +715,19 @@ load_icode(unsigned char *binary, size_t size)
      * NOTICE: If we set trapframe correctly, then the user level process can return to USER MODE from kernel. So
      *          tf_cs should be USER_CS segment (see memlayout.h)
      *          tf_ds=tf_es=tf_ss should be USER_DS segment
-     *          tf_esp should be the top addr of user stack (USTACKTOP)
+     *          tf_esp should be the top addr of user stack (USER_STACK_TOP)
      *          tf_eip should be the entry point of this binary program (elf->e_entry)
      *          tf_eflags should be set to enable computer to produce Interrupt
      */
     tf->tf_cs = USER_CS;
     tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
-    tf->tf_esp = USTACKTOP;
+    tf->tf_esp = USER_STACK_TOP;
     tf->tf_eip = elf->e_entry;
     tf->tf_eflags = FL_IF;
     ret = 0;
+    // (7) 到这里,用户环境已经搭建完毕. 此时 initproc 将按产生系统调用的函数调用路径原路返回,
+    //     执行中断返回指令 "iret"(trapentry.S 的最后一条)后，将切换到用户进程 hello 的第一条
+    //     指令 _start 处(user/libs/initcode.S )开始执行.
 
 out:
     return ret;
@@ -704,8 +742,13 @@ bad_mm:
 }
 
 // do_execve - call exit_mmap(mm) & put_pgdir(mm) to reclaim memory space of current process
-//           - call load_icode to setup new memory space accroding binary prog.
-// 先回收自身所占用用户空间,然后调用 load_icode, 用新的程序覆盖内存空间,形成一个执行程序的新进程.
+//           - call load_elf to setup new memory space accroding binary prog.
+// 先回收自身所占用用户空间,然后调用 load_elf, 用新的程序覆盖内存空间,创建一个新进程.
+// 首先为加载新的执行程序做好用户态内存空间清空准备. 如果 mm != NULL, 则设置 PT 为内核空间 PT,
+// 且进一步判断 mm 的引用计数减 1 后是否为 0 , 如果为 0,则表明没有进程再需要此进程所占用的内存空间,
+// 为此将根据 mm 中的记录,释放进程所占用户空间内存和进程 PT 本身所占空间。
+// 最后把当前进程的 mm 内存管理指针设置为 NULL. 由于此处的 initproc 是内核线程,所以 mm=NULL，整个
+// 处理都不用做.
 int
 do_execve(const char *name, size_t len, unsigned char *binary, size_t size) 
 {
@@ -723,7 +766,9 @@ do_execve(const char *name, size_t len, unsigned char *binary, size_t size)
     memcpy(local_name, name, len);
 
     if (mm != NULL) {
+        // 设置 PT 为内核空间 PT.
         lcr3(boot_cr3);
+        // 判断是否还有其它进程需要此进程占用的空间. 
         if (mm_count_dec(mm) == 0) {
             exit_mmap(mm);
             put_pgdir(mm);
@@ -731,8 +776,9 @@ do_execve(const char *name, size_t len, unsigned char *binary, size_t size)
         }
         current->mm = NULL;
     }
+    // load ELF
     int ret;
-    if ((ret = load_icode(binary, size)) != 0) {
+    if ((ret = load_elf(binary, size)) != 0) {
         goto execve_exit;
     }
     set_proc_name(current, local_name);
@@ -827,6 +873,10 @@ do_kill(int pid)
 }
 
 // kernel_execve - do SYS_exec syscall to exec a user program called by user_main kernel_thread
+// vector128(0x80 vectors.S) --> __alltraps(trapentry.S)--> trap(trap.c)--> 
+// trap_dispatch -->syscall(syscall.c)-->sys_exec(syscall.c)-->do_execve(proc.c)
+// 最终通过 do_execve 函数完成用户进程的创建工作.
+
 static int
 kernel_execve(const char *name, unsigned char *binary, size_t size) 
 {
@@ -883,25 +933,20 @@ init_main(void *arg)
 {
     size_t nr_free_pages_store = nr_free_pages();
     size_t kernel_allocated_store = kallocated();
-    cprintf("init_main nr_free_pages_store [%d] [%d] \n",nr_free_pages_store,nr_free_pages());
 
     int pid = kernel_thread(user_main,NULL,0);
     if (pid <= 0) {
         panic("create user_main failed. \n");
     }
     
-
     while (do_wait(0,NULL) == 0) {
         schedule();
     }
-cprintf("init_main nr_free_pages_store [%d] [%d] \n",nr_free_pages_store,nr_free_pages());
-
     cprintf("all user-mode processes have quit.\n");
     assert(initproc->cptr == NULL && initproc->yptr == NULL && initproc->optr == NULL);
     assert(nr_process == 2);
     assert(list_next(&proc_list) == &(initproc->list_link));
     assert(list_prev(&proc_list) == &(initproc->list_link));
-    cprintf("init_main nr_free_pages_store [%d] [%d] \n",nr_free_pages_store,nr_free_pages());
     assert(nr_free_pages_store == nr_free_pages());
     assert(kernel_allocated_store == kallocated());
     cprintf("init check memory pass.\n");

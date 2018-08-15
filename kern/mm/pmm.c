@@ -68,7 +68,7 @@ extern struct mm_struct *check_mm_struct;
  * PTE for number n is stored in vpt[n].
  *
  * A second consequence is that the contents of the current page directory will
- * always available at virtual address PG_ADDR(PDX(VPT), PDX(VPT), 0), to which
+ * always available at virtual address PG_ADDR(PDE_X(VPT), PDE_X(VPT), 0), to which
  * vpd is set bellow.
  * */
 pte_t * const vpt = (pte_t *)VPT;
@@ -76,7 +76,7 @@ pte_t * const vpt = (pte_t *)VPT;
 // 第一个 PDE 指向的 PT 的起始 virtual addr. 此时描述 kernel 虚拟空间的 PDT 的virtual addr 
 //  = 0xFAFEB000, 大小=4kb. PT 的理论连续 virtual addr 空间为 0xFAC00000 ~ 0xFB000000,大小为4MB
 // 可以有 1M 个 PTE, 即可映射 4GB 的地址空间 (实际上不会用完这么多页).
-pde_t * const vpd = (pde_t *)PG_ADDR(PDX(VPT), PDX(VPT), 0);
+pde_t * const vpd = (pde_t *)PG_ADDR(PDE_X(VPT), PDE_X(VPT), 0);
 /* *
  * Global Descriptor Table:
  * 全局描述表 gdt[]
@@ -337,10 +337,10 @@ boot_alloc_page(void)
    first pde vitr addr = [0xc01ba000] PDT 中第一个 PDE 的虚拟起始地址 KADDR(PDE_ADDR(*pdep))
    first pde vitr addr - first pde phys addr = [0x0c000000]  映射关系
 
-   page table index  = PTX(la)
+   page table index  = PTE_X(la)
 
-   pte phys addr = &((pte_t *)(PDE_ADDR(*pdep)))[PTX(la)]
-   pte virt addr = &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)]
+   pte phys addr = &((pte_t *)(PDE_ADDR(*pdep)))[PTE_X(la)]
+   pte virt addr = &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTE_X(la)]
 
    first la ==>[c0000000]
    first pte vitr addr in first pde = [0xc01ba000]
@@ -358,12 +358,13 @@ pte_t *
 get_pte(pde_t *pgdir, uintptr_t la, bool create)
 {
     // (1) find page directory entry 尝试获取页表 
-    pde_t *pdep = &pgdir[PDX(la)]; 
+    pde_t *pdep = &pgdir[PDE_X(la)]; 
     // (2) check if entry is not present 若获取不成功则申请一页;
     if (!(*pdep & PTE_P)) {  
         struct Page *page;
         // (3) check if creating is needed, then alloc page for page table
-        //如果create参数为0,则get_pte返回NULL;如果create参数不为0,则get_pte需要申请一个新的物理页(通过alloc_page来实现
+        // 如果 create == 0,则 get_pte 返回NULL; 如果 create != 0,则get_pte需要申请
+        // 一个新的物理页(通过alloc_page来实现)
         if (!create || (page = alloc_page()) == NULL) {
             return NULL;
         }
@@ -377,10 +378,10 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create)
         *pdep = pa | PTE_U | PTE_W | PTE_P;
     }
 
-    // cprintf("pte idx =>%d Phy PDE_ADDR ==>[%08lx] Vir PDE_ADDR ==>[%08lx]\n\t Phy PTE_ADDR ==>[%08lx] Vir PTE_addr ==>[%08lx] la ==>[%08lx]  pgdir==>[%08lx]\n",PTX(la),PDE_ADDR(*pdep),KADDR(PDE_ADDR(*pdep)),&((pte_t *)(PDE_ADDR(*pdep)))[PTX(la)],&((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)],la, pgdir);
+    // cprintf("pte idx =>%d Phy PDE_ADDR ==>[%08lx] Vir PDE_ADDR ==>[%08lx]\n\t Phy PTE_ADDR ==>[%08lx] Vir PTE_addr ==>[%08lx] la ==>[%08lx]  pgdir==>[%08lx]\n",PTE_X(la),PDE_ADDR(*pdep),KADDR(PDE_ADDR(*pdep)),&((pte_t *)(PDE_ADDR(*pdep)))[PTE_X(la)],&((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTE_X(la)],la, pgdir);
 
     // (8) return page table entry 返回页表 virtual addr 
-    return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)]; 
+    return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTE_X(la)]; 
 }
 //get_page - get related Page struct for linear address la using PDT pgdir
 struct Page *
@@ -403,16 +404,18 @@ get_page(pde_t *pgdir, uintptr_t la, pte_t **ptep_store)
 static inline void
 page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep)
 {
-    //(1) check if page directory is present 判断页表中该表项是否存在
+    //(1) check if page directory is present 
+    // 判断页表中该表项是否存在
     if (*ptep & PTE_P) {   	
         //(2) find corresponding page to pte		  
         struct Page *page = pte2page(*ptep);
         //(3) decrease page reference 判断是否只被引用了一次
         if (page_ref_dec(page) == 0) {
-           // (4) and free this page when page reference reachs 0 如果只被引用了一次,那么可以释放掉此页
+           // (4) and free this page when page reference reachs 0 
             free_page(page); 	      
         }
-        // (5) clear second page table entry 如果被多次引用,则不能释放此页,只用释放二级页表的表项
+        // (5) clear second page table entry 
+        // 如果被多次引用,则不能释放此页,只用释放二级页表的表项
         *ptep = 0;
         //(6) flush tlb	 更新页表				  
         tlb_invalidate(pgdir, la);   
@@ -590,7 +593,7 @@ check_boot_pgdir(void)
         assert(PTE_ADDR(*ptep) == i);
     }
 
-    assert(PDE_ADDR(boot_pgdir[PDX(VPT)]) == PADDR(boot_pgdir));
+    assert(PDE_ADDR(boot_pgdir[PDE_X(VPT)]) == PADDR(boot_pgdir));
 
     assert(boot_pgdir[0] == 0);
 
@@ -654,9 +657,9 @@ pmm_init(void)
 
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
-    cprintf("VPT(virtual page table) page directory index ==>%d \n",PDX(VPT));
+    cprintf("VPT(virtual page table) page directory index ==>%d \n",PDE_X(VPT));
     
-    boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;//PDX(VPT) = 1003
+    boot_pgdir[PDE_X(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;//PDE_X(VPT) = 1003
    
     // step 5--> 建立一一映射关系的二级页表
     // map all physical memory to linear memory with base linear addr KERN_BASE
@@ -667,8 +670,8 @@ pmm_init(void)
 
     //temporary map:
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M
-    cprintf("page directory index[%d] \n",PDX(KERN_BASE));
-    boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768
+    cprintf("page directory index[%d] \n",PDE_X(KERN_BASE));
+    boot_pgdir[0] = boot_pgdir[PDE_X(KERN_BASE)]; //PDE_X(KERN_BASE) = 768
     // step 6--> 使能分页机制
     enable_paging();
     //step 7 --> 重新设置全局段描述表 GDT
@@ -743,6 +746,7 @@ unmap_range(pde_t *pgdir, uintptr_t start, uintptr_t end)
 {
     assert(start % PAGE_SIZE == 0 && end % PAGE_SIZE == 0);
     assert(USER_ACCESS(start,end));
+
     do {
         pte_t *ptep = get_pte(pgdir, start,0);
         if (ptep == NULL) {
@@ -766,7 +770,7 @@ exit_range(pde_t *pgdir, uintptr_t start, uintptr_t end)
 
     start = ROUNDDOWN(start,PT_SIZE);
     do {
-        int pde_idx = PDX(start);
+        int pde_idx = PDE_X(start);
         if (pgdir[pde_idx] & PTE_P) {
             free_page(pde2page(pgdir[pde_idx]));
             pgdir[pde_idx] = 0;

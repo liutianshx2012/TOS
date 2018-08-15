@@ -165,10 +165,12 @@ insert_vma_struct(struct mm_struct *mm, struct vma_struct *vma)
 }
 
 // mm_destroy - free mm and mm internal fields
+// 释放 mm 中 vma 所占内存,最后释放 mm 所占内存.
 void
 mm_destroy(struct mm_struct *mm) 
 {
     assert(mm_count(mm) == 0);
+
     list_entry_t *list = &(mm->mmap_list), *le;
     while ((le = list_next(list)) != list) {
         list_del(le);
@@ -241,18 +243,23 @@ dup_mmap(struct mm_struct *to , struct mm_struct *from)
     return 0;
 }
 /*
- * 删除映射用户进程的合法内存空间
+ * 删除映射用户进程的合法内存空间 
+ * 1 => 释放 current->mm->vma 链表中每个 vma 描述的进程合法空间中实际分配的内存,
+ * 2 => 然后把对应的 PTE 内容清空,
+ * 3 => 最后把 PT 所占内存释放并把对应的 PDTe 清空.
  */
 void
 exit_mmap(struct mm_struct *mm) 
 {
     assert(mm != NULL && mm_count(mm) == 0);
+
     pde_t *pgdir = mm->pgdir;
     list_entry_t *list = &(mm->mmap_list), *le = list;
     while ((le = list_next(le)) != list) {
         struct vma_struct *vma = le2vma(le, list_link);
         unmap_range(pgdir, vma->vm_start, vma->vm_end);
     }
+
     while ((le = list_next(le)) != list) {
         struct vma_struct *vma = le2vma(le, list_link);
         exit_range(pgdir, vma->vm_start, vma->vm_end);

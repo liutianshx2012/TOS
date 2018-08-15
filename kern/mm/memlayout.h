@@ -49,7 +49,7 @@
  *                            |                                 |
  *     KERN_BASE -----------> +---------------------------------+ 0xC0000000 (3GB)
 *                             |        Invalid Memory (*)       | --/--
- *     USERTOP -------------> +---------------------------------+ 0xB0000000
+ *     USER_TOP -------------> +---------------------------------+ 0xB0000000
  *                            |           User stack            |
  *                            +---------------------------------+
  *                            |                                 |
@@ -63,7 +63,7 @@
  *                            |        Invalid Memory (*)       | --/--
  *                            |  - - - - - - - - - - - - - - -  |
  *                            |    User STAB Data (optional)    |
- *     USERBASE, USTAB------> +---------------------------------+ 0x00200000
+ *     USER_BASE, USTAB------> +---------------------------------+ 0x00200000
  *                            |        Invalid Memory (*)       | --/--
  *     0 -------------------> +---------------------------------+ 0x00000000
  *                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -90,7 +90,7 @@
 #define KERN_TOP (KERN_BASE + KMEMSIZE) //最大的 kernel virtual addr = 0xf8000000
 
 /* *
- * Virtual page table. Entry PDX[VPT] in the PD (Page Directory) contains
+ * Virtual page table. Entry PDE_X[VPT] in the PD (Page Directory) contains
  * a pointer to the page directory itself, thereby turning the PD into a page
  * table, which maps all the PTEs (Page Table Entry) containing the page mappings
  * for the entire virtual address space into that 4 Meg region starting at VPT.
@@ -102,17 +102,17 @@
 #define KERN_STACK_SIZE (KERN_STACK_PAGE * PAGE_SIZE) // sizeof kernel stack   8k
 
 
-#define USERTOP             0xB0000000
-#define USTACKTOP           USERTOP
-#define USTACKPAGE          256				   //of pages in user stack
-#define USTACKSIZE    		(USTACKPAGE*PAGE_SIZE)//sizeof user stack
+#define USER_TOP                 0xB0000000
+#define USER_STACK_TOP           USER_TOP
+#define USER_STACK_PAGE          256				   //of pages in user stack
+#define USER_STACK_SIZE    		(USER_STACK_PAGE*PAGE_SIZE)//sizeof user stack
 
-#define USERBASE            0x00200000
+#define USER_BASE           0x00200000
 #define UTEXT               0x00800000 	       //where user programs generally begin
-#define USTAB               USERBASE		   //the location of the user STABS data structure
+#define USTAB               USER_BASE		   //the location of the user STABS data structure
 
 #define USER_ACCESS(start, end)                     \
-	(USERBASE <= (start) && (start) < (end) && (end) <= USERTOP)
+	(USER_BASE <= (start) && (start) < (end) && (end) <= USER_TOP)
 
 #define KERN_ACCESS(start, end)                     \
 	(KERN_BASE <= (start) && (start) < (end) && (end) <= KERN_TOP)
