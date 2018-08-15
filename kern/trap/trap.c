@@ -65,7 +65,7 @@ idt_init(void)
     for (i = 0; i < sizeof(idt) / sizeof(struct gatedesc); i++) {
         SETGATE(idt[i],0,G_D_K_TEXT, __vectors[i],DPL_KERNEL);
     }
-    // 设置用于系统调用的中断门信息
+    // 设置用于系统调用的中断门信息  int 0x80;
     SETGATE(idt[T_SYSCALL], 1, G_D_K_TEXT, __vectors[T_SYSCALL], DPL_USER);
 
     /*load the IDT ==> 使用 LIDT 指令加载 IDT 中断描述符表*/

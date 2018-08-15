@@ -22,7 +22,8 @@ syscall(int num, ...)
         a[i] = va_arg(ap,uint32_t);
     }
     va_end(ap);
-    
+    // eax 存中断号, a[0]~a[4] 分别保存在 EDX | ECX | EBX | EDI | ESI 五个寄存器中.
+    // 最多用 6 个寄存器来传递系统调用的参数, 系统调用返回结果存在 EAX 中.
     __asm__ volatile (
         "int %1;"
         : "=a" (ret)
