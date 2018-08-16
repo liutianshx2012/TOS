@@ -18,6 +18,7 @@
 #include <ide.h>
 #include <swap.h>
 #include <proc.h>
+#include <sched.h>
 #include <kmonitor.h>
 
 void kern_init(void) __attribute__((noreturn));
@@ -53,16 +54,16 @@ kern_init(void)
     cprintf("%s\n\n",message);
     print_kerninfo();
     mon_backtrace(0, NULL, NULL);
-    print_cur_status();
+    //print_cur_status();
 
     pmm_init();                 // init physical memory management
 
     pic_init();                 // init interrupt controller
     idt_init();                 // init interrupt descriptor table
 
-
     vmm_init();                 // init virtual memory management
-  	proc_init(); 				        // init process table
+    sched_init();               // init scheduler
+    proc_init(); 				// init process table
     ide_init();                 // init ide devices
     swap_init();                // init swap
 

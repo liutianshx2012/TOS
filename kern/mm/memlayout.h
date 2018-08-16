@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 12时58分47秒
  ************************************************************************/
-#ifndef _KERN_MM_MEMLAYOUT_H
-#define _KERN_MM_MEMLAYOUT_H
+#ifndef __KERN_MM_MEMLAYOUT_H
+#define __KERN_MM_MEMLAYOUT_H
 
 /* This file contains the definitions for memory management in our OS. */
 

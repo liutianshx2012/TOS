@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 10时09分00秒
  ************************************************************************/
-#ifndef _LIBS_STDIO_H
-#define _LIBS_STDIO_H
+#ifndef __LIBS_STDIO_H
+#define __LIBS_STDIO_H
 
 #include <defs.h>
 #include <stdarg.h>

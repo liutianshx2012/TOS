@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 14时36分53秒
  ************************************************************************/
-#ifndef _KERN_DEBUG_KMONITOR_H
-#define _KERN_DEBUG_KMONITOR_H
+#ifndef __KERN_DEBUG_KMONITOR_H
+#define __KERN_DEBUG_KMONITOR_H
 
 #include <trap.h>
 

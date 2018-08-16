@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 10时13分22秒
  ************************************************************************/
-#ifndef _LIBS_X86_H
-#define _LIBS_X86_H
+#ifndef __LIBS_X86_H
+#define __LIBS_X86_H
 
 #include <defs.h>
 #include <stdio.h>
@@ -272,7 +272,7 @@ lcr3(uintptr_t cr3)
         : "r" (cr3) 
         : "memory"
     );
-    cprintf("cr3 ==>[%08lx]\n",cr3);
+    cprintf("cr3 (PDT base addr): [%08lx]\n",cr3);
 }
 
 static inline uintptr_t
@@ -285,7 +285,7 @@ rcr0(void)
         :
         : "memory"
     );
-    cprintf("cr0 ==>[%08lx]\n",cr0);
+    cprintf("CR0 reg:[%08lx]\n",cr0);
     return cr0;
 }
 

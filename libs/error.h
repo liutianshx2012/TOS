@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 10时03分27秒
  ************************************************************************/
-#ifndef _LIBS_ERROR_H
-#define _LIBS_ERROR_H
+#ifndef __LIBS_ERROR_H
+#define __LIBS_ERROR_H
 
 /* kernel error codes -- keep in sync with list in lib/printfmt.c */
 #define E_UNSPECIFIED         1    // Unspecified or unknown problem

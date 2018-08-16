@@ -15,6 +15,7 @@
 #include <memlayout.h>
 #include <default_pmm.h>
 #include <swap.h>
+#include <vmm.h>
 #include <kmalloc.h>
 #include <pmm.h>
 /* *
@@ -574,7 +575,7 @@ boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, uintptr_t pa, uint32_t
     size_t n = ROUNDUP(size + PG_OFF(la), PAGE_SIZE) / PAGE_SIZE;// n => 229376
     la = ROUNDDOWN(la, PAGE_SIZE);
     pa = ROUNDDOWN(pa, PAGE_SIZE);
-    cprintf("page frame nums =>%d la ==>[%08lx] pa ==>[%08lx] pgdir==>[%08lx]\n",n,la, pa,pgdir);
+    cprintf("setup & enable the paging mechanism parameters frame nums:[%d] la:[%08lx] pa :[%08lx] pgdir:[%08lx]\n",n,la, pa,pgdir);
 
     for (; n > 0; n --, la += PAGE_SIZE, pa += PAGE_SIZE) {
         pte_t *ptep = get_pte(pgdir, la, 1);
@@ -623,8 +624,6 @@ check_boot_pgdir(void)
 void
 pmm_init(void)
 {   
-    cprintf("vpt addr ==>[%08lx]\n",vpt);
-    cprintf("vpd addr ==>[%08lx]\n\n\n",vpd);
     /* We need to alloc | free the physical memory (granularity is 4KB or other size).
      * So a framework of physical memory manager (struct pmm_manger) is defined in pmm.h
      * First  we  should init  a physical memory manager(pmm) based on the  framework.
@@ -657,7 +656,7 @@ pmm_init(void)
 
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
-    cprintf("VPT(virtual page table) page directory index ==>%d \n",PDE_X(VPT));
+    cprintf("VPT pde idx:[%d] \n",PDE_X(VPT));
     
     boot_pgdir[PDE_X(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;//PDE_X(VPT) = 1003
    
@@ -670,7 +669,7 @@ pmm_init(void)
 
     //temporary map:
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M
-    cprintf("page directory index[%d] \n",PDE_X(KERN_BASE));
+    cprintf("pde idx:[%d] \n",PDE_X(KERN_BASE));
     boot_pgdir[0] = boot_pgdir[PDE_X(KERN_BASE)]; //PDE_X(KERN_BASE) = 768
     // step 6--> 使能分页机制
     enable_paging();

@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Tue 05 Jul 2016 03:01:48 PM CST
  ************************************************************************/
-#ifndef _KERN_LIBS_LIST_H
-#define _KERN_LIBS_LIST_H
+#ifndef __KERN_LIBS_LIST_H
+#define __KERN_LIBS_LIST_H
 
 #ifndef __ASSEMBLER__
 

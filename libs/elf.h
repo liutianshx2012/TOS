@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 10时13分44秒
  ************************************************************************/
-#ifndef _LIBS_ELF_H
-#define _LIBS_ELF_H
+#ifndef __LIBS_ELF_H
+#define __LIBS_ELF_H
 
 #include <defs.h>
 

@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 14时24分04秒
  ************************************************************************/
-#ifndef _KERN_DRIVER_CONSOLE_H
-#define _KERN_DRIVER_CONSOLE_H
+#ifndef __KERN_DRIVER_CONSOLE_H
+#define __KERN_DRIVER_CONSOLE_H
 
 void cons_init(void);
 

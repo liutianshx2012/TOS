@@ -301,7 +301,7 @@ check_vmm(void)
 {
 
     size_t nr_free_pages_store = nr_free_pages();
-    cprintf("vmm nr_free_pages_store [%d]\n",nr_free_pages_store);
+    cprintf("vmm nr_free_pages_store: [%d]\n",nr_free_pages_store);
 
     check_vma_struct();
 

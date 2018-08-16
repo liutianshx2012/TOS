@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 10时02分58秒
  ************************************************************************/
-#ifndef _LIBS_DEFS_H
-#define _LIBS_DEFS_H
+#ifndef __LIBS_DEFS_H
+#define __LIBS_DEFS_H
 
 #ifndef NULL
 #define NULL ((void *)0)

@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Mon 01 Aug 2016 07:41:41 PM PDT
  ************************************************************************/
-#ifndef _LIBS_UNISTD_H
-#define _LIBS_UNISTD_H
+#ifndef __LIBS_UNISTD_H
+#define __LIBS_UNISTD_H
 
 #define T_SYSCALL   0x80
 
@@ -27,6 +27,9 @@
 #define SYS_shmem   22
 #define SYS_putc    30
 #define SYS_pgdir   31
+
+/* OLNY FOR PROJ6 */
+#define SYS_priority 255
 
 /* SYS_fork flags */
 #define CLONE_VM                0x00000100 //set if vm shared between processes

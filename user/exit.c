@@ -12,10 +12,9 @@ int magic = -0x10384;
 int 
 main(void) 
 {
-    int pid = 0;
-    int code = 0;
+    int pid, code;
     cprintf("I am the parent .Forking the child ...\n");
-    if ((pid == fork())==0 ) {
+    if ((pid = fork())==0 ) {
         cprintf(" I am the child .\n");
         yield();
         yield();

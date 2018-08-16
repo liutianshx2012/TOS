@@ -4,13 +4,14 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Mon 18 Jul 2016 10:44:31 PM CST
  ************************************************************************/
-#ifndef _KERN_PROC_PROC_H
-#define _KERN_PROC_PROC_H
+#ifndef __KERN_PROC_PROC_H
+#define __KERN_PROC_PROC_H
 
 #include <defs.h>
 #include <list.h>
 #include <trap.h>
 #include <memlayout.h>
+#include <skew_heap.h>
 
 // 实现进程|线程相关功能 ==>  创建进程|线程, 初始化进程|线程, 处理进程|线程退出
 
@@ -71,6 +72,13 @@ struct proc_struct
     struct proc_struct *cptr;
     struct proc_struct *yptr;
     struct proc_struct *optr;
+
+    struct run_queue *rq;                       // running queue contains Process
+    list_entry_t run_link;                      // the entry linked in run queue
+    int time_slice;                             // time slice for occupying the CPU
+    skew_heap_entry_t proj6_run_pool;            // FOR proj6 ONLY: the entry in the run pool
+    uint32_t proj6_stride;                       // FOR proj6 ONLY: the current stride of the process 
+    uint32_t proj6_priority;   
 };
 
 #define PF_EXITING                  0x00000001  //getting shutdown
@@ -108,5 +116,8 @@ int do_execve(const char *name, size_t len, unsigned char *binary, size_t size);
 int do_wait(int pid, int *code_store);
 
 int do_kill(int pid);
+
+//FOR proj6, set the process's priority (bigger value will get more CPU time) 
+void proj6_set_priority(uint32_t priority);
 
 #endif

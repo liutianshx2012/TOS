@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Mon 01 Aug 2016 07:50:43 PM PDT
  ************************************************************************/
-#ifndef _USER_LIBS_ULIB_H
-#define _USER_LIBS_ULIB_H
+#ifndef __USER_LIBS_ULIB_H
+#define __USER_LIBS_ULIB_H
 
 #include <defs.h>
 
@@ -45,6 +45,8 @@ int getpid(void);
 
 void print_pgdir(void);
 
+unsigned int gettime_msec(void);
 
-int tprintf(const char *fmt, ...); 
+void proj6_set_priority(uint32_t priority);
+
 #endif

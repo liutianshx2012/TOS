@@ -4,3 +4,4 @@
 # virtual memory  | page 
 # kernel process | thread 
 # user process | thread
+# schedule

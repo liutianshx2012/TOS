@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 13时01分14秒
  ************************************************************************/
-#ifndef _KERN_TRAP_TRAP_H
-#define _KERN_TRAP_TRAP_H
+#ifndef __KERN_TRAP_TRAP_H
+#define __KERN_TRAP_TRAP_H
 
 #include <defs.h>
 

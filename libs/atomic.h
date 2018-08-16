@@ -73,7 +73,7 @@ static inline bool
 test_and_set_bit(int nr, volatile void *addr) 
 {
     int oldbit;
-    asm volatile ("btsl %2, %1; sbbl %0, %0" : "=r" (oldbit), "=m" (*(volatile long *)addr) : "Ir" (nr) : "memory");
+    __asm__ volatile ("btsl %2, %1; sbbl %0, %0" : "=r" (oldbit), "=m" (*(volatile long *)addr) : "Ir" (nr) : "memory");
     return oldbit != 0;
 }
 
@@ -86,7 +86,7 @@ static inline bool
 test_and_clear_bit(int nr, volatile void *addr) 
 {
     int oldbit;
-    asm volatile ("btrl %2, %1; sbbl %0, %0" : "=r" (oldbit), "=m" (*(volatile long *)addr) : "Ir" (nr) : "memory");
+    __asm__ volatile ("btrl %2, %1; sbbl %0, %0" : "=r" (oldbit), "=m" (*(volatile long *)addr) : "Ir" (nr) : "memory");
     return oldbit != 0;
 }
 

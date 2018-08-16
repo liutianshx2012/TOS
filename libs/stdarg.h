@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 10时07分27秒
  ************************************************************************/
-#ifndef _LIBS_STDARG_H
-#define _LIBS_STDARG_H
+#ifndef __LIBS_STDARG_H
+#define __LIBS_STDARG_H
 
 /* compiler provides size of save area */
 typedef __builtin_va_list va_list;

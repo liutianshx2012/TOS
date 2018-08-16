@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 11时50分25秒
  ************************************************************************/
-#ifndef _KERN_MM_PMM_H
-#define _KERN_MM_PMM_H
+#ifndef __KERN_MM_PMM_H
+#define __KERN_MM_PMM_H
 
 #include <defs.h>
 #include <mmu.h>

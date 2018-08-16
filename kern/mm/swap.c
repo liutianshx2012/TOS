@@ -4,6 +4,7 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Fri 08 Jul 2016 02:52:32 PM CST
  ************************************************************************/
+#include <kdebug.h>
 #include <stdio.h>
 #include <string.h>
 #include <memlayout.h>
@@ -259,8 +260,9 @@ check_swap(void)
     for (i=0;i<CHECK_VALID_PHY_PAGE_NUM;i++) {
         free_pages(check_rp[i],1);
     } 
-    
-	 free_page(pa2page(pgdir[0]));
+    //free_page(pa2page(pgdir[0]));
+	 free_page(pde2page(pgdir[0]));
+	 
      pgdir[0] = 0;
      mm->pgdir = NULL;
 	 

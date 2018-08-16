@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 12时51分24秒
  ************************************************************************/
-#ifndef _KERN_MM_MMU_H
-#define _KERN_MM_MMU_H
+#ifndef __KERN_MM_MMU_H
+#define __KERN_MM_MMU_H
 
 /* Eflags register 标志寄存器 EFLAGS 中的系统标志 */
 #define FL_CF            0x00000001    // Carry Flag 进位标志 0

@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Mon 18 Jul 2016 10:50:01 PM CST
  ************************************************************************/
-#ifndef _KERN_MM_KMALLOC_H
-#define _KERN_MM_KMALLOC_H
+#ifndef __KERN_MM_KMALLOC_H
+#define __KERN_MM_KMALLOC_H
 
 #include <defs.h>
 /*

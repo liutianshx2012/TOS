@@ -84,9 +84,21 @@ sys_putc(int c)
 }
 
 int
-sys_pgdir(void) {
+sys_pgdir(void) 
+{
     return syscall(SYS_pgdir);
 }
 
+size_t
+sys_gettime(void) 
+{
+    return syscall(SYS_gettime);
+}
+
+void
+sys_priority(uint32_t priority) 
+{
+    syscall(SYS_priority,priority);
+}
 
 

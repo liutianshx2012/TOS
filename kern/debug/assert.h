@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 14时33分06秒
  ************************************************************************/
-#ifndef _KERN_DEBUG_ASSERT_H
-#define _KERN_DEBUG_ASSERT_H
+#ifndef __KERN_DEBUG_ASSERT_H
+#define __KERN_DEBUG_ASSERT_H
 
 #include <defs.h>
 

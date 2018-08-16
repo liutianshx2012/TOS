@@ -1,0 +1,5 @@
+# proj 6
+
+1 => 理解 OS 的调度管理机制.
+2 => 调度框架, 缺省的 Round-Robin 调度算法.
+3 => 基于调度框架实现一个 (Stride Scheduling)调度算法来替换缺省 Round-Robin 算法

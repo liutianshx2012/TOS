@@ -20,6 +20,7 @@
 #include <error.h>
 #include <sched.h>
 #include <sync.h>
+#include <proc.h>
 #include <trap.h>
 
 /* 初步处理后,继续完成具体的各种中断处理操作. */
@@ -30,7 +31,6 @@ static volatile int in_swap_tick_event = 0;
 /* temporary trapframe or pointer to trapframe */
 extern struct mm_struct *check_mm_struct;
 
-extern struct proc_struct *current;
 
 static void 
 print_ticks(void)
@@ -202,7 +202,7 @@ pgfault_handler(struct trapframe *tf)
         }
         mm = current->mm;
     }
-    cprintf("mm =>[0x%08lx]\n",mm);
+    //cprintf("mm =>[0x%08lx]\n",mm);
     return do_pgfault(mm, tf->tf_err, rcr2());
 }
 
@@ -235,11 +235,7 @@ trap_dispatch(struct trapframe *tf)
         }
         case IRQ_OFFSET + IRQ_TIMER: {  //时钟中断
             ticks ++;
-            if (ticks % TICK_NUM == 0) {
-                print_ticks();
-				assert(current != NULL);
-          	    current->need_resched =1;
-            }
+            assert(current != NULL);
             break;
         }
         case IRQ_OFFSET + IRQ_COM1: { //串口中断,显示收到的字符

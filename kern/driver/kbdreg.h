@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: 2016年06月18日 星期六 14时29分43秒
  ************************************************************************/
-#ifndef _KERN_DRIVER_KBDREG_H
-#define _KERN_DRIVER_KBDREG_H
+#ifndef __KERN_DRIVER_KBDREG_H
+#define __KERN_DRIVER_KBDREG_H
 
 // Special keycodes
 #define KEY_HOME            0xE0

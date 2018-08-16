@@ -109,6 +109,13 @@ alloc_proc(void)
         memset(proc->name, 0, PROC_NAME_LEN);
         proc->wait_state = 0;
         proc->cptr = proc->optr = proc->yptr = NULL;
+
+        proc->rq = NULL;
+        list_init(&(proc->run_link));
+        proc->time_slice = 0;
+        proc->proj6_run_pool.left = proc->proj6_run_pool.right =   proc->proj6_run_pool.parent = NULL;
+        proc->proj6_stride = 0;
+        proc->proj6_priority = 0;
     }
 
     return proc;
@@ -377,7 +384,7 @@ bad_mm:
 static void
 copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) 
 {
-    cprintf("copy thread=> esp [0x%08lx]\n",esp);
+    cprintf("when crossing rings(U->K)  proc->tf->tf_esp: [0x%08lx]\n",esp);
     // 在内核堆栈的顶部设置中断帧大小的一块栈空间
     proc->tf = (struct trapframe *)(proc->kstack + KERN_STACK_SIZE) - 1;
     // 拷贝在 kernel_thread 函数建立的临时中断帧的初始值
@@ -414,10 +421,7 @@ copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf)
     根据 context.eip 的赋值,可以知道 initproc 实际开始执行的地方在 forkret 函数处.至此,initproc 内核线程已经做好准备执行了.
     */
     proc->context.eip = (uintptr_t)forkret;
-    proc->context.esp = (uintptr_t)(proc->tf);
-    cprintf("copy_thread forkret  [0x%08lx] proc->context.esp [0x%08lx]\n",proc->context.eip,(uintptr_t)(proc->tf));
-    
-  
+    proc->context.esp = (uintptr_t)(proc->tf);    
 }
 
 /* do_fork -     parent process for a new child process
@@ -921,7 +925,7 @@ user_main(void *arg)
     KERNEL_EXECVE2(TEST, TESTSTART, TESTSIZE);
 #else
     cprintf("user main base !!!\n");
-    KERNEL_EXECVE(hello);
+    KERNEL_EXECVE(exit);
 #endif
     panic("user_main execve failed.\n");
 }
@@ -1001,3 +1005,13 @@ cpu_idle(void)
     }
 }
 
+//FOR proj6, set the process's priority (bigger value will get more CPU time) 
+void
+proj6_set_priority(uint32_t priority) 
+{
+    if (priority == 0) {
+        current->proj6_priority = 1;
+    } else {
+        current->proj6_priority = priority;
+    }
+}

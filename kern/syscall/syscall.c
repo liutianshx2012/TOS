@@ -6,11 +6,12 @@
  ************************************************************************/
 #include <unistd.h>
 #include <proc.h>
-#include <syscall.h>
 #include <trap.h>
 #include <stdio.h>
 #include <pmm.h>
 #include <assert.h>
+#include <clock.h>
+#include <syscall.h>
 
 static int
 sys_exit(uint32_t arg[]) 
@@ -79,6 +80,20 @@ sys_pgdir(uint32_t arg[])
     return 0;
 }
 
+static int
+sys_gettime(uint32_t arg[]) 
+{
+    return (int)ticks;
+}
+
+static int
+sys_priority(uint32_t arg[]) 
+{
+    uint32_t priority = (uint32_t)arg[0];
+    proj6_set_priority(priority);
+    return 0;
+}
+
 static int (*syscalls[])(uint32_t arg[]) = 
 {
     [SYS_exit]      =       sys_exit,
@@ -90,6 +105,8 @@ static int (*syscalls[])(uint32_t arg[]) =
     [SYS_getpid]    =       sys_getpid,
     [SYS_putc]      =       sys_putc,
     [SYS_pgdir]     =       sys_pgdir,
+    [SYS_gettime]   =       sys_gettime,
+    [SYS_priority]  =       sys_priority,
 };
 
 

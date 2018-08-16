@@ -4,8 +4,8 @@
 	> Mail: liutianshxkernel@gmail.com
 	> Created Time: Fri 08 Jul 2016 02:53:11 PM CST
  ************************************************************************/
-#ifndef _KERN_MM_VMM_H
-#define _KERN_MM_VMM_H
+#ifndef __KERN_MM_VMM_H
+#define __KERN_MM_VMM_H
 
 #include <defs.h>
 #include <list.h>
