@@ -1,3 +1,5 @@
+PROJ	:= proj6
+
 include function.mk
 
 
