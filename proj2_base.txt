@@ -63,34 +63,49 @@ offset           size         Descriptor
 
 ## struct Page
 
-在获得 available physical addr 范围后,系统需要建立相应的数据结构来管理 以物理页(4kb 对齐,4kb 大小)为最小单位的整个物理内存, 以配合后续涉及的分页管理机制. 每一个屋里页可以用一个 Page 数据结构来表示. 由于一个物理页需要占用一个 struct Page 的内存空间, struct Page 设计时必须尽可能的小.
-以页为单位的物理内存分配管理的实现算法在 kern/default_pmm.CPL
+在获得 available physical addr 范围后,系统需要建立相应的数据结构来管理 以物理页(4kb 对齐,4kb 大小)
+为最小单位的整个物理内存, 以配合后续涉及的分页管理机制. 每一个物理页可以用一个 struct Page 来表示. 由
+于一个物理页需要占用一个 struct Page 的内存空间, struct Page 设计时必须尽可能的小.
+以页为单位的物理内存分配管理的实现算法在 kern/default_pmm.
 
-为了与以后的分页机制配合,需要先建立对整个计算机的每一个物理页的属性 struct Page ,包含了映射此物理页的虚拟页个数 ref;描述物理页属性的 flags 和 双休链接各个 struct Page 的 page_link 双向链表.
+为了与以后的分页机制配合,需要先建立对整个计算机的每一个物理页的属性 struct Page ,包含了映射此物理页的
+虚拟页个数 ref;描述物理页属性的 flags 和 双向链接各个 struct Page 的 page_link 双向链表.
 
 
 ## struct free_area_t
 
    在初始情况下,也许物理内存的空闲物理页都是连续的,这样就形成一个大的连续内存空闲块.
-   但伴随着物理页的分配与释放,这个大的连续内存空闲块会分裂为一系列地址不连续的 多个小的连续内存空闲块,并且每个连续内存空闲块内部的物理页是连续的.    那么为了有效地管理这些小连续内存空闲块,所有的连续内存连续空闲块可用一个 双向链表管理起来, 便于分配和释放,为此定义了一个 struct free_area_t ,包含了一个 list_entry_t 的双向链表指针(指向了空闲的物理页).
+   但伴随着物理页的分配与释放,这个大的连续内存空闲块会分裂为一系列地址不连续的 多个小的连续内存空闲块,并
+   且每个连续内存空闲块内部的物理页是连续的.    那么为了有效地管理这些小连续内存空闲块,所有的连续内存连
+   续空闲块可用一个 双向链表管理起来, 便于分配和释放,为此定义了一个 struct free_area_t ,包含了一个 
+   list_entry_t 的双向链表指针(指向了空闲的物理页).
 
 
-有了这两个数据结构, kernel 就可以管理起来整个 以Page 为单位的物理内存空间. 接下来需要解决两个问题：
+有了这两个数据结构, kernel 就可以管理起来整个 以 Page 为单位的物理内存空间. 接下来需要解决两个问题：
 
   A : ===> 管理页级物理内存空间所需的 struct Page 的内存空间从哪里开始,占用多大空间？
   B : ===> 空闲内存空间的起始地址在哪里？
 
-  对于这两个问题,我们首先根据 bootloader 给出的内存布局信息找出最大的物理内存地址 maxpa (定义在 page_init 函数中的局部变量),由于 x86 的起始物理内存地址为 0, 所以可以得知需要管理的物理页个数为  npage = maxpa / PAGE_SIZE;
+  对于这两个问题,我们首先根据 bootloader 给出的内存布局信息找出最大的物理内存地址 maxpa (定义在 
+  page_init 函数中的局部变量),由于 x86 的起始物理内存地址为 0, 所以可以得知需要管理的物理页个数为  
+  
+                  npage = maxpa / PAGE_SIZE;
 
-  这样,我们就可以预估处管理页级物理内存空间所需的 struct Page 的内存空间所需的 内存大小为
+  这样,我们就可以预估出 管理 页级物理内存空间所需的 struct Page 的内存空间所需的 内存大小为
 
-   sizeof(struct Page) * npage;
+                  sizeof(struct Page) * npage;
 
-   由于 bootloader load kernel elf 的结束地址(用全局指针变量 end 记录)以上的空间没有被使用,所以我们可以把 end 按 Page 大小为边界取整后,作为管理页级物理内存空间所需的 struct Page 的内存空间, 记为:
-   pages = (struct Page *)ROUNDUP ((void*)end, PAGE_SIZE);
+   由于 bootloader load kernel elf 的结束地址(用全局指针变量 end 记录)以上的空间没有被使用,所以我
+   们可以把 end 按 Page 大小为边界取整后,作为管理页级物理内存空间所需的 struct Page 的内存空间, 记
+   为:
+   
+            pages = (struct Page *)ROUNDUP ((void*)end, PAGE_SIZE);
 
 
-   为了简化,从 addr =0 到 addr= pages+sizeof(struct Page) * npage 结束的物理内存空间设定为已占用物理内存空间 (起始 0 ~ 640KB 的空间是空闲的), addr = pages +sizeof(struct Page) * npage 以上的空间为空闲物理内存空间,这时的空闲空间起始地址为
+   为了简化,从 addrA =0 到 addrB = pages + sizeof(struct Page) * npage 结束的物理内存空间设定
+   为已占用物理内存空间 (起始 0 ~ 640KB 的空间是空闲的), addrB 以上的空间为空闲物理内存空间,这时的空
+   闲空间起始(物理)地址为
+   
    uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
 
 
@@ -123,10 +138,12 @@ offset           size         Descriptor
 
         在 page_init 函数中计算, bootloader 给出的硬件内存布局信息,找出最大 phys addr = maxpa,
         由于 x86 的起始 phys addr = 0, 可以计算出需要管理的最大 phys page frame 的个数 为
-        npage = maxpa / PAGE_SIZE; //32736
+        
+                  npage = maxpa / PAGE_SIZE; //32736
 
         进一步可以计算出 这些 phys page frame 需要占用的 内存大小为
-        sizeof(struct Page) * npage = 639KB
+        
+                  sizeof(struct Page) * npage = 639KB
 
         bootloader 加载 kernel elf 的结束地址 .end 以上的空间是没有被使用的,
         可以把 end 按 page size 为边界取整后,作为管理页级 phys addr 所需的 struct page 的内存空间.
@@ -231,7 +248,7 @@ physical page. 在二级页表结构中,页目录表(PDT)占 4KB 空间, kernel 
 假设当前物理内存 0~ 16MB, 每个页帧(page frame) = 4kb,则用 16^20 / 4^10 = 4096 个物理页,也就意
 味着有 4 个 PDE (Page Directory Entry) 和 4096 个 PTE(Page Table Entry) 需要设置. 每一个
 
-PDE 和 PTE 大小均为 4B . 即使只有 4 个 PDE 也需要一个完整的 PDT(4kb) 表示.  而 4096 个 PTE 需要 16kb (4096 * 4B),也就是 4 个 page frame.  
+PDE 和 PTE 大小均为 4B . 即使只有 4 个 PDE 也需要一个完整的 PDT(4kb) 装.  而 4096 个 PTE 需要 16kb (4096 * 4B),也就是 4 个 page frame.  
 
 所以对 16MB 的物理页建立一一映射的 16MB 的虚拟页,需要 5 个物理页, 即 20KB 的空间来生成二级页表.
 

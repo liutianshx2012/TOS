@@ -1,4 +1,3 @@
-# TOS
-# boot
-# kernel
-# physical memory | page 
+# boot block
+# kernel elf
+# physical memory | page framw

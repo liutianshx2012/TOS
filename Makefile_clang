@@ -1,3 +1,5 @@
+PROJ	:= proj2
+
 include function.mk
 
 
