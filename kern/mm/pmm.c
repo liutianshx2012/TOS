@@ -104,7 +104,8 @@ static struct segdesc gdt[] =
 
 static struct pseudodesc gdt_pd =
 {
-    sizeof(gdt) - 1, (uintptr_t)gdt
+    sizeof(gdt) - 1, //limit
+    (uintptr_t)gdt   //base
 };
 
 static void check_alloc_page(void);
@@ -623,7 +624,7 @@ check_boot_pgdir(void)
  **/
 void
 pmm_init(void)
-{   
+{   cprintf("VPT: [%08lx] vpd:[%08lx]\n",vpt,vpd);
     /* We need to alloc | free the physical memory (granularity is 4KB or other size).
      * So a framework of physical memory manager (struct pmm_manger) is defined in pmm.h
      * First  we  should init  a physical memory manager(pmm) based on the  framework.
@@ -646,47 +647,47 @@ pmm_init(void)
     //cprintf("boot_pgdir  virtual addr ==>[%08lx]\n",boot_pgdir);//c01b9000
     boot_cr3 = PADDR(boot_pgdir);
     //cprintf("boot_cr3 physical addr ==>[%08lx]\n",boot_cr3);//001b9000
-    // c01b9000(virtual addr) - 001b9000(physical addr)  = 0xC0000000 stage 2 映射关系
-
+    // stage 2 映射关系 :c01b9000(virtual addr) - 001b9000(physical addr)  = 0xC0000000 
     check_pgdir();
-
     static_assert(KERN_BASE % PT_SIZE == 0 && KERN_TOP % PT_SIZE == 0);
-    
-
-
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
-    cprintf("VPT pde idx:[%d] \n",PDE_X(VPT));
-    
+    cprintf("boot_pgdir => VPT pde idx:[%d] \n",PDE_X(VPT));
     boot_pgdir[PDE_X(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;//PDE_X(VPT) = 1003
-   
     // step 5--> 建立一一映射关系的二级页表
     // map all physical memory to linear memory with base linear addr KERN_BASE
-    //linear_addr KERN_BASE~KERN_BASE+KMEMSIZE = phy_addr 0~KMEMSIZE
-    //But shouldn't use this map until enable_paging() & gdt_init() finished.
+    // linear_addr KERN_BASE~KERN_BASE+KMEMSIZE = phy_addr 0~KMEMSIZE
+    // But shouldn't use this map until enable_paging() & gdt_init() finished.
     boot_map_segment(boot_pgdir, KERN_BASE, KMEMSIZE, 0, PTE_W);
-    
-
-    //temporary map:
+    //temporary map: 4M = 4^20 = 2^21 = 0x400000
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M
-    cprintf("pde idx:[%d] \n",PDE_X(KERN_BASE));
     boot_pgdir[0] = boot_pgdir[PDE_X(KERN_BASE)]; //PDE_X(KERN_BASE) = 768
     // step 6--> 使能分页机制
     enable_paging();
+    cprintf("KERN_BASE => pde idx:[%d] \n",PDE_X(KERN_BASE));
+    uintptr_t kern_base_p = boot_pgdir[PDE_X(KERN_BASE)];
+    cprintf("stage 3(0~4M) va:[%08lx]\n",kern_base_p);
+
     //step 7 --> 重新设置全局段描述表 GDT
-    //reload gdt(third time,the last time) to map all physical memory
-    //virtual_addr 0~4G=liear_addr 0~4G
-    //then set kernel stack(ss:esp) in TSS, setup TSS in gdt, load TSS
+    // Since we are using entry.S 's GDT
+    // We should reload gdt(third time,the last time) to map all physical memory
+    // virtual_addr 0~4G = liear_addr 0~4G
+    // then set kernel stack(ss:esp) in TSS, setup TSS in gdt, load TSS
     gdt_init();
     //step 8 -->取消临时二级页表
     //disable the map of virtual_addr 0~4M
     boot_pgdir[0] = 0;
     // step 9--> 检查页表建立是否正确
-    //now the basic virtual memory map(see memalyout.h) is established.
-    //check the correctness of the basic virtual memory map.
+    // now the basic virtual memory map(see memalyout.h) is established.
+    // check the correctness of the basic virtual memory map.
     check_boot_pgdir();
     //step 10-->通过自映射机制完成页表的打印输出
     print_pgdir();
+    cprintf("stage 1 映射关系(bootloader start~kernel kern_entry 之前): va = la = pa\n");
+    cprintf("stage 2 映射关系(kern_entry~enable_page): va - 0xC0000000 = la = pa\n");
+    cprintf("stage 3 [la 0~4M]映射关系(enable_page~gdt_init之前): va-0xC0000000=la=pa\n");
+    cprintf("stage 3 [la 4M~]映射关系(enable_page~gdt_init之前): va-0xC0000000=la=pa+0xC0000000\n");
+    cprintf("stage 4 映射关系(gdt_init~): va  = la = pa + 0xC0000000\n");
 
     kmalloc_init();
 }
