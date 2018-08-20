@@ -49,4 +49,6 @@ unsigned int gettime_msec(void);
 
 void proj6_set_priority(uint32_t priority);
 
+int sleep(unsigned int time);
+
 #endif

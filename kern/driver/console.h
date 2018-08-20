@@ -15,6 +15,4 @@ int cons_getc(void);
 
 void serial_intr(void);
 
-void kbd_intr(void);
-
 #endif

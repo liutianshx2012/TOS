@@ -52,9 +52,11 @@ kern_init(void)
     cons_init();
     const char *message = "TOS is loading...";
     cprintf("%s\n\n",message);
+    
     print_kerninfo();
     mon_backtrace(0, NULL, NULL);
-    //print_cur_status();
+    
+    print_cur_status();
 
     pmm_init();                 // init physical memory management
 

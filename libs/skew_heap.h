@@ -89,10 +89,11 @@ skew_heap_remove(skew_heap_entry_t *a, skew_heap_entry_t *b,
         rep->parent = p;
     }
     if (p) {
-        if (p->left == b)
+        if (p->left == b) {
             p->left = rep;
-        else
+        } else {
             p->right = rep;
+		}	
         return a;
     } else {
         return rep;

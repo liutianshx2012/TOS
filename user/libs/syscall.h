@@ -28,6 +28,9 @@ int sys_pgdir(void);
 size_t sys_gettime(void);
 /* for proj6 only*/
 void sys_priority(uint32_t priority);
+/* for proj7 only*/
+int sys_sleep(unsigned int time); 
+
 
 #endif
 

@@ -1,4 +1,4 @@
-PROJ	:= proj6
+PROJ	:= proj7
 SLASH	:= /
 
 V       := @

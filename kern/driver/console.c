@@ -13,7 +13,7 @@
 #include <kbdreg.h>
 #include <picirq.h>
 #include <memlayout.h>
-
+#include <console.h>
 /* 	实现了对串口和键盘的中断方式的处理操作 */
 
 /* stupid I/O delay routine necessitated by historical PC design flaws */

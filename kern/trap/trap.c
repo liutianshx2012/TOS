@@ -236,6 +236,8 @@ trap_dispatch(struct trapframe *tf)
         case IRQ_OFFSET + IRQ_TIMER: {  //时钟中断
             ticks ++;
             assert(current != NULL);
+            print_ticks();
+			run_timer_list(); //proj 7
             break;
         }
         case IRQ_OFFSET + IRQ_COM1: { //串口中断,显示收到的字符

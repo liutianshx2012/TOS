@@ -151,40 +151,40 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info)
     info->eip_fn_addr = addr;
     info->eip_fn_narg = 0;
 
-    if (addr >= KERN_BASE) {
+    // if (addr >= KERN_BASE) {
         stabs = __STAB_BEGIN__;
         stab_end = __STAB_END__;
         stabstr = __STABSTR_BEGIN__;
         stabstr_end = __STABSTR_END__;
-    }
-    else {
-        // user-program linker script, tools/user.ld puts the information about the
-        // program's stabs (included __STAB_BEGIN__, __STAB_END__, __STABSTR_BEGIN__,
-        // and __STABSTR_END__) in a structure located at virtual address USTAB.
-        const struct userstabdata *usd = (struct userstabdata *)USTAB;
+    // }
+    // else {
+    //     // user-program linker script, tools/user.ld puts the information about the
+    //     // program's stabs (included __STAB_BEGIN__, __STAB_END__, __STABSTR_BEGIN__,
+    //     // and __STABSTR_END__) in a structure located at virtual address USTAB.
+    //     const struct userstabdata *usd = (struct userstabdata *)USTAB;
 
-        // make sure that debugger (current process) can access this memory
-        struct mm_struct *mm;
-        if (current == NULL || (mm = current->mm) == NULL) {
-            return -1;
-        }
-        if (!user_mem_check(mm, (uintptr_t)usd, sizeof(struct userstabdata), 0)) {
-            return -1;
-        }
+    //     // make sure that debugger (current process) can access this memory
+    //     struct mm_struct *mm;
+    //     if (current == NULL || (mm = current->mm) == NULL) {
+    //         return -1;
+    //     }
+    //     if (!user_mem_check(mm, (uintptr_t)usd, sizeof(struct userstabdata), 0)) {
+    //         return -1;
+    //     }
 
-        stabs = usd->stabs;
-        stab_end = usd->stab_end;
-        stabstr = usd->stabstr;
-        stabstr_end = usd->stabstr_end;
+    //     stabs = usd->stabs;
+    //     stab_end = usd->stab_end;
+    //     stabstr = usd->stabstr;
+    //     stabstr_end = usd->stabstr_end;
 
-        // make sure the STABS and string table memory is valid
-        if (!user_mem_check(mm, (uintptr_t)stabs, (uintptr_t)stab_end - (uintptr_t)stabs, 0)) {
-            return -1;
-        }
-        if (!user_mem_check(mm, (uintptr_t)stabstr, stabstr_end - stabstr, 0)) {
-            return -1;
-        }
-    }
+    //     // make sure the STABS and string table memory is valid
+    //     if (!user_mem_check(mm, (uintptr_t)stabs, (uintptr_t)stab_end - (uintptr_t)stabs, 0)) {
+    //         return -1;
+    //     }
+    //     if (!user_mem_check(mm, (uintptr_t)stabstr, stabstr_end - stabstr, 0)) {
+    //         return -1;
+    //     }
+    // }
 
     // String table validity checks
     if (stabstr_end <= stabstr || stabstr_end[-1] != 0) {

@@ -94,6 +94,13 @@ sys_priority(uint32_t arg[])
     return 0;
 }
 
+static int
+sys_sleep(uint32_t arg[]) 
+{
+    unsigned int time = (unsigned int)arg[0];
+    return do_sleep(time);
+}
+
 static int (*syscalls[])(uint32_t arg[]) = 
 {
     [SYS_exit]      =       sys_exit,
@@ -107,6 +114,8 @@ static int (*syscalls[])(uint32_t arg[]) =
     [SYS_pgdir]     =       sys_pgdir,
     [SYS_gettime]   =       sys_gettime,
     [SYS_priority]  =       sys_priority,
+    [SYS_sleep]     =       sys_sleep,
+
 };
 
 

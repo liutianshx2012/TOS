@@ -1,0 +1,28 @@
+/*************************************************************************
+	> File Name: sem.h
+	> Author:TTc 
+	> Mail: liutianshxkernel@gmail.com 
+	> Created Time: Mon 15 Aug 2016 08:54:44 PM PDT
+ ************************************************************************/
+#ifndef __KERN_SYNC_SEM_H
+#define __KERN_SYNC_SEM_H
+
+#include <defs.h>
+#include <atomic.h>
+#include <wait.h>
+
+typedef struct
+{
+	int value;
+	wait_queue_t wait_queue;
+} semaphore_t;
+
+void sem_init(semaphore_t *sem, int value);
+
+void up(semaphore_t *sem);
+
+void down(semaphore_t *sem);
+
+bool try_down(semaphore_t *sem);
+
+#endif

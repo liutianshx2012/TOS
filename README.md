@@ -5,3 +5,4 @@
 # kernel process | thread 
 # user process | thread
 # schedule
+# sync

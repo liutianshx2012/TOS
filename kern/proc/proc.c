@@ -384,7 +384,7 @@ bad_mm:
 static void
 copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) 
 {
-    cprintf("when crossing rings(U->K)  proc->tf->tf_esp: [0x%08lx]\n",esp);
+    // cprintf("when crossing rings(U->K)  proc->tf->tf_esp: [0x%08lx]\n",esp);
     // 在内核堆栈的顶部设置中断帧大小的一块栈空间
     proc->tf = (struct trapframe *)(proc->kstack + KERN_STACK_SIZE) - 1;
     // 拷贝在 kernel_thread 函数建立的临时中断帧的初始值
@@ -552,14 +552,7 @@ do_exit(int error_code)
     panic("do_exit will not return!! %d.\n", current->pid);
 }
 
-// do_yield - ask the scheduler to reschedule
-// 让调度器执行一次选择新进程的过程.
-int
-do_yield(void) 
-{
-    current->need_resched = 1;
-    return 0;
-}
+
 
 /* load_elf - load the content of binary program(ELF format) as the new content of current process
  * @binary:  the memory addr of the content of binary program
@@ -793,6 +786,15 @@ execve_exit:
     panic("already exit: %e.\n", ret);
 }
 
+// do_yield - ask the scheduler to reschedule
+// 让调度器执行一次选择新进程的过程.
+int
+do_yield(void) 
+{
+    current->need_resched = 1;
+    return 0;
+}
+
 // do_wait - wait one OR any children with PROC_ZOMBIE state, and free memory space of kernel stack
 //         - proc struct of this child.
 // NOTE: only after do_wait function, all resources of the child proces are free.
@@ -930,7 +932,6 @@ user_main(void *arg)
     panic("user_main execve failed.\n");
 }
 
-
 // init_main - the second kernel thread used to create user_main kernel threads
 static int
 init_main(void *arg) 
@@ -942,7 +943,13 @@ init_main(void *arg)
     if (pid <= 0) {
         panic("create user_main failed. \n");
     }
-    
+    /**********************************************/
+    // only for proj7 check sync 
+    extern void check_sync(void);
+    // check philosopher sync problem
+    check_sync();
+    /**********************************************/
+
     while (do_wait(0,NULL) == 0) {
         schedule();
     }
@@ -1014,4 +1021,27 @@ proj6_set_priority(uint32_t priority)
     } else {
         current->proj6_priority = priority;
     }
+}
+
+// FOR proj7
+// do_sleep - set current process state to sleep and add timer with "time"
+//          - then call scheduler. if process run again, delete timer first.
+int
+do_sleep(unsigned int time)
+{
+    if (time == 0) {
+        return 0;
+    }
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    timer_t __timer, *timer = timer_init(&__timer, current, time);
+    current->state = PROC_SLEEPING;
+    current->wait_state = WT_TIMER;
+    add_timer(timer);
+    local_intr_restore(intr_flag);
+
+    schedule();
+
+    del_timer(timer);
+    return 0;
 }

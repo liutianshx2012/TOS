@@ -101,4 +101,8 @@ sys_priority(uint32_t priority)
     syscall(SYS_priority,priority);
 }
 
-
+int
+sys_sleep(unsigned int time) 
+{
+    return syscall(SYS_sleep, time);
+}

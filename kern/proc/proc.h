@@ -43,7 +43,7 @@ struct context
     uint32_t ebp;
 };
 
-#define PROC_NAME_LEN 15
+#define PROC_NAME_LEN 50
 #define MAX_PROCESS 4096
 #define MAX_PID (MAX_PROCESS * 2)
 
@@ -69,10 +69,8 @@ struct proc_struct
     int exit_code;                //exit code(be sent to parent proc)
     uint32_t wait_state;          // waiting state
     // relations between processes
-    struct proc_struct *cptr;
-    struct proc_struct *yptr;
-    struct proc_struct *optr;
-
+    struct proc_struct *cptr, *yptr, *optr;;
+   
     struct run_queue *rq;                       // running queue contains Process
     list_entry_t run_link;                      // the entry linked in run queue
     int time_slice;                             // time slice for occupying the CPU
@@ -83,8 +81,10 @@ struct proc_struct
 
 #define PF_EXITING                  0x00000001  //getting shutdown
 
-#define WT_CHILD                    (0x00000001 | WT_INTERRUPTED)
 #define WT_INTERRUPTED               0x80000000    // the wait state could be interrupted
+#define WT_CHILD                    (0x00000001 | WT_INTERRUPTED)
+#define WT_KSEM                      0x00000100                    // wait kernel semaphore
+#define WT_TIMER                    (0x00000002 | WT_INTERRUPTED)  // wait timer
 
 #define le2proc(le, member) \
     to_struct((le), struct proc_struct, member)
@@ -119,5 +119,7 @@ int do_kill(int pid);
 
 //FOR proj6, set the process's priority (bigger value will get more CPU time) 
 void proj6_set_priority(uint32_t priority);
+// FOR pro7
+int do_sleep(unsigned int time);
 
 #endif

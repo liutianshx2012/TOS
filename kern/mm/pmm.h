@@ -13,9 +13,6 @@
 #include <assert.h>
 #include <memlayout.h>
 
-/* fork flags used in do_fork*/
-#define CLONE_VM            0x00000100  // set if VM shared between processes
-#define CLONE_THREAD        0x00000200  // thread group
 
 /* pmm_manager  is a physical memory management struct. A special pmm manager - 
  * xxx_pmm_manager . only needs to implement the methods in pmm_manager class, then

@@ -6,6 +6,7 @@
  ************************************************************************/
 #include <stdio.h>
 #include <string.h>
+#include <mmu.h>
 #include <trap.h>
 #include <kmonitor.h>
 #include <kdebug.h>
@@ -32,6 +33,8 @@ static struct command commands[] =
     {"backtrace", "Print backtrace of stack frame.", mon_backtrace},
 };
 
+/* return if kernel is panic, in kern/debug/panic.c */
+bool is_kernel_panic(void);
 #define NCOMMANDS (sizeof(commands)/sizeof(struct command))
 
 /***** Kernel monitor command interpreter *****/
