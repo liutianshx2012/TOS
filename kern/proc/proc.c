@@ -504,7 +504,7 @@ do_exit(int error_code)
         // 切换到内核态的 PT 上,这样当前用户进程目前只能在内核虚拟地址空间执行了,这是为了
         // 确保后续释放用户态内存 和 用户态 PT 的工作能够正常执行.
         lcr3(boot_cr3);
-        // 当前进程 mm 的引用计数为 0 表示没有其它进程共享,可以彻底释放进程所占的用户虚拟空间了。
+        // 当前进程 mm 的引用计数为 0 表示没有其它进程共享,可以彻底释放进程所占的用户虚拟空间了.
         if (mm_count_dec(mm) == 0) {
             exit_mmap(mm);
             put_pgdir(mm);
@@ -527,7 +527,7 @@ do_exit(int error_code)
             wakeup_proc(proc);
         }
         // 如果当前进程还有子进程,则需要把这些子进程的父进程指针设置为 内核线程 initproc(现代 OS 
-        // 的 init 进程),且各个子进程指针需要插入到 initproc 的子进程链表中。 
+        // 的 init 进程),且各个子进程指针需要插入到 initproc 的子进程链表中. 
         // 如果某个子进程的执行状态是 PROC_ZOMBIE,则需要唤醒 initproc 来完成对此子进程的最后回收
         while (current->cptr != NULL) {
             proc = current->cptr;
@@ -723,7 +723,7 @@ load_elf(unsigned char *binary, size_t size)
     tf->tf_eflags = FL_IF;
     ret = 0;
     // (7) 到这里,用户环境已经搭建完毕. 此时 initproc 将按产生系统调用的函数调用路径原路返回,
-    //     执行中断返回指令 "iret"(trapentry.S 的最后一条)后，将切换到用户进程 hello 的第一条
+    //     执行中断返回指令 "iret"(trapentry.S 的最后一条)后,将切换到用户进程 hello 的第一条
     //     指令 _start 处(user/libs/initcode.S )开始执行.
 
 out:
@@ -743,8 +743,8 @@ bad_mm:
 // 先回收自身所占用用户空间,然后调用 load_elf, 用新的程序覆盖内存空间,创建一个新进程.
 // 首先为加载新的执行程序做好用户态内存空间清空准备. 如果 mm != NULL, 则设置 PT 为内核空间 PT,
 // 且进一步判断 mm 的引用计数减 1 后是否为 0 , 如果为 0,则表明没有进程再需要此进程所占用的内存空间,
-// 为此将根据 mm 中的记录,释放进程所占用户空间内存和进程 PT 本身所占空间。
-// 最后把当前进程的 mm 内存管理指针设置为 NULL. 由于此处的 initproc 是内核线程,所以 mm=NULL，整个
+// 为此将根据 mm 中的记录,释放进程所占用户空间内存和进程 PT 本身所占空间.
+// 最后把当前进程的 mm 内存管理指针设置为 NULL. 由于此处的 initproc 是内核线程,所以 mm=NULL,整个
 // 处理都不用做.
 int
 do_execve(const char *name, size_t len, unsigned char *binary, size_t size) 
@@ -860,7 +860,7 @@ found:
 }
 
 // do_kill - kill process with pid by set this process's flags with PF_EXITING
-// 给一个进程设置 PF_EXITING 标志("kill" 信息,即要杀死它),这样 trap 中，将根据此标志,让进程退出.
+// 给一个进程设置 PF_EXITING 标志("kill" 信息,即要杀死它),这样 trap 中,将根据此标志,让进程退出.
 int
 do_kill(int pid) 
 {
@@ -1034,10 +1034,12 @@ do_sleep(unsigned int time)
     }
     bool intr_flag;
     local_intr_save(intr_flag);
-    timer_t __timer, *timer = timer_init(&__timer, current, time);
-    current->state = PROC_SLEEPING;
-    current->wait_state = WT_TIMER;
-    add_timer(timer);
+    {
+        timer_t __timer, *timer = timer_init(&__timer, current, time);
+        current->state = PROC_SLEEPING;
+        current->wait_state = WT_TIMER;
+        add_timer(timer);
+    }
     local_intr_restore(intr_flag);
 
     schedule();

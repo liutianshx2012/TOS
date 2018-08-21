@@ -110,7 +110,7 @@ schedule(void)
     }
     local_intr_restore(intr_flag);
 }
-
+// 向系统添加某个初始化过的 timer ,该定时器在指定时间后被激活,并将对应的进程唤醒至 runnable(如果当前处于等待状态).
 void
 add_timer(timer_t *timer)
 {
@@ -133,7 +133,7 @@ add_timer(timer_t *timer)
     }
     local_intr_restore(intr_flag);
 }
-
+// 取消某一个定时器.
 void
 del_timer(timer_t *timer)
 {
@@ -153,7 +153,8 @@ del_timer(timer_t *timer)
     }
     local_intr_restore(intr_flag);
 }
-
+// 更新当前系统时间点,遍历当前所有处在系统管理内的定时器,找出所有应该激活的 timer ,并激活它们.
+// 该过程在且只在每次 时钟中断 时被调用.
 void
 run_timer_list(void)
 {
@@ -173,7 +174,7 @@ run_timer_list(void)
                 } else {
                     warn("process %d's wait_state == 0.\n", proc->pid);
                 }
-                wakeup_proc(proc);
+                wakeup_proc(proc); 
                 del_timer(timer);
                 if (le == &timer_list) {
                     break;
@@ -181,7 +182,7 @@ run_timer_list(void)
                 timer = le2timer(le, timer_link);
             }
         }
-        sched_class_proc_tick(current);
+        sched_class_proc_tick(current);// 调度
     }
     local_intr_restore(intr_flag);
 }

@@ -9,7 +9,7 @@ switch_to:                      # switch_to(from, to)
     movl 4(%esp), %eax          # eax points to from
     popl 0(%eax)        # esp--> return address, so save return addr in FROM’s context
     
-    # 接下来的 7 条汇编指令完成了保存 from 进程的其它 7 个 regs 到context 中的相应成员变量中。 
+    # 接下来的 7 条汇编指令完成了保存 from 进程的其它 7 个 regs 到context 中的相应成员变量中. 
     movl %esp, 4(%eax)
     movl %ebx, 8(%eax)
     movl %ecx, 12(%eax)

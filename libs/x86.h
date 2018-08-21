@@ -272,7 +272,7 @@ lcr3(uintptr_t cr3)
         : "r" (cr3) 
         : "memory"
     );
-    cprintf("cr3 (PDT base addr): [%08lx]\n",cr3);
+    //cprintf("cr3 (PDT base addr): [%08lx]\n",cr3);
 }
 
 static inline uintptr_t

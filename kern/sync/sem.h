@@ -13,8 +13,8 @@
 
 typedef struct
 {
-	int value;
-	wait_queue_t wait_queue;
+	int value;                  // 信号量的当前值
+	wait_queue_t wait_queue;    // 信号量对应的等待队列
 } semaphore_t;
 
 void sem_init(semaphore_t *sem, int value);

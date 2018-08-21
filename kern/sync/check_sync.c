@@ -89,7 +89,7 @@ semaphore_t s[N]; /* 每个哲学家一个信号量 */
 struct proc_struct *philosopher_proc_sema[N];
 
 void
-phi_test_sema(int i)   /* i：哲学家号码从0到N-1 */
+phi_test_sema(int i)   /* i:哲学家号码从0到N-1 */
 { 
     if(state_sema[i]==HUNGRY&&state_sema[LEFT]!=EATING
             &&state_sema[RIGHT]!=EATING) {
@@ -99,7 +99,7 @@ phi_test_sema(int i)   /* i：哲学家号码从0到N-1 */
 }
 
 void
-phi_take_forks_sema(int i)  /* i：哲学家号码从0到N-1 */
+phi_take_forks_sema(int i)  /* i:哲学家号码从0到N-1 */
 {
     down(&mutex); /* 进入临界区 */
     state_sema[i]=HUNGRY; /* 记录下哲学家i饥饿的事实 */
@@ -109,7 +109,7 @@ phi_take_forks_sema(int i)  /* i：哲学家号码从0到N-1 */
 }
 
 void
-phi_put_forks_sema(int i)  /* i：哲学家号码从0到N-1 */
+phi_put_forks_sema(int i)  /* i:哲学家号码从0到N-1 */
 {
     down(&mutex); /* 进入临界区 */
     state_sema[i]=THINKING; /* 哲学家进餐结束 */
@@ -117,9 +117,9 @@ phi_put_forks_sema(int i)  /* i：哲学家号码从0到N-1 */
     phi_test_sema(RIGHT); /* 看一下右邻居现在是否能进餐 */
     up(&mutex); /* 离开临界区 */
 }
-
+ /* i:哲学家号码,从0到N-1 */
 int
-philosopher_using_semaphore(void * arg)  /* i：哲学家号码，从0到N-1 */
+philosopher_using_semaphore(void * arg) 
 {
     int i, iter=0;
     i=(int)arg;
@@ -128,7 +128,7 @@ philosopher_using_semaphore(void * arg)  /* i：哲学家号码，从0到N-1 */
         cprintf("Iter %d, No.%d philosopher_sema is thinking\n",iter,i); /* 哲学家正在思考 */
         do_sleep(SLEEP_TIME);
         phi_take_forks_sema(i);
-        /* 需要两只叉子，或者阻塞 */
+        /* 需要两只叉子,或者阻塞 */
         cprintf("Iter %d, No.%d philosopher_sema is eating\n",iter,i); /* 进餐 */
         do_sleep(SLEEP_TIME);
         phi_put_forks_sema(i);
@@ -273,6 +273,7 @@ check_sync(void)
     }
 
     //check condition variable
+    /*
     monitor_init(&mt, N);
     for(i=0; i<N; i++) {
         state_condvar[i]=THINKING;
@@ -283,4 +284,5 @@ check_sync(void)
         philosopher_proc_condvar[i] = find_proc(pid);
         set_proc_name(philosopher_proc_condvar[i], "philosopher_condvar_proc");
     }
+    */
 }
