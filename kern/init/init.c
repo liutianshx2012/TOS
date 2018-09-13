@@ -30,7 +30,7 @@ kern_init(void)
     const char *message = "TOS is loading...";
     cprintf("%s\n\n",message);
     print_kerninfo();
-    mon_backtrace(0, NULL, NULL);
+    // mon_backtrace(0, NULL, NULL);
 
     pmm_init();
 

@@ -248,17 +248,19 @@ page_init(void)
 
     extern char end[]; /* kernel.ld 定义 bootloader 加载 kernel elf 的结束链接地址*/
     npage = maxpa / PAGE_SIZE;
-    cprintf("\n\n max phys page frame numbers [%d]\n",npage);
+    // cprintf("\n\n max phys page frame numbers [%d]\n",npage);
     /* 管理页级物理内存空间所需的 struct Page 共占用的 内存的起始地址*/
     pages = (struct Page *)ROUNDUP((void*)end, PAGE_SIZE);
-    cprintf(" pages [%08lx] sizeof(struct Page)=%d manager mem size =>%d\n",PADDR((uintptr_t)pages),sizeof(struct Page),npage * sizeof(struct Page));
+    
+    cprintf("elf kernel end addr [0x%08lx] [0x%08lx] manager mem size [%d]\n",PADDR((uintptr_t)pages),pages,npage * sizeof(struct Page));
+
     for (i=0;i<npage;i++) {
         SetPageReserved(pages + i);
     }
     /* 0 ~ pages + sizeof(struct Page) * npage) 之间的物理内存空间设定为 已占用的物理内存(存储了 npage 个 struct Page )  起始 0 ~~~ 640KB 是空闲的*/
     // freemem 是这时空闲空间的起始地址. 上面的 SetPageReserved 把两部分空间给标识出来,标识已占用
-    uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);//0x001b8d80
-    cprintf("freemem phys addr [%08lx]\n",freemem);
+    uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);//0x001b8d80  = 1763kb
+    cprintf("freemem phys addr [0x%08lx]\n",freemem);
 
     for (i=0;i<memmap->nr_map;i++) {
         uint64_t begin = memmap->map[i].addr;
@@ -466,7 +468,7 @@ check_pgdir(void)
 
     struct Page *p1, *p2;
     p1 = alloc_page();
-    cprintf("p1 ==>[%08lx]\n",p1);
+    // cprintf("p1 ==>[%08lx]\n",p1);
     assert(page_insert(boot_pgdir, p1, 0x0, 0) == 0);
 
     pte_t *ptep;
@@ -531,7 +533,7 @@ boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, uintptr_t pa, uint32_t
     size_t n = ROUNDUP(size + PG_OFF(la), PAGE_SIZE) / PAGE_SIZE;// n => 229376
     la = ROUNDDOWN(la, PAGE_SIZE);
     pa = ROUNDDOWN(pa, PAGE_SIZE);
-    cprintf("page frame nums =>%d la ==>[%08lx] pa ==>[%08lx] pgdir==>[%08lx]\n",n,la, pa,pgdir);
+    // cprintf("page frame nums =>%d la ==>[%08lx] pa ==>[%08lx] pgdir==>[%08lx]\n",n,la, pa,pgdir);
 
     for (; n > 0; n --, la += PAGE_SIZE, pa += PAGE_SIZE) {
         pte_t *ptep = get_pte(pgdir, la, 1);
@@ -580,8 +582,6 @@ check_boot_pgdir(void)
 void
 pmm_init(void)
 {   
-    cprintf("vpt addr ==>[%08lx]\n",vpt);
-    cprintf("vpd addr ==>[%08lx]\n\n\n",vpd);
     /* We need to alloc | free the physical memory (granularity is 4KB or other size).
      * So a framework of physical memory manager (struct pmm_manger) is defined in pmm.h
      * First  we  should init  a physical memory manager(pmm) based on the  framework.
@@ -601,33 +601,28 @@ pmm_init(void)
     // create boot_pgdir, an initial page directory(Page Directory Table, PDT)
     boot_pgdir = boot_alloc_page();
     memset(boot_pgdir, 0, PAGE_SIZE);//4kb
-    cprintf("boot_pgdir  virtual addr ==>[%08lx]\n",boot_pgdir);//c01b9000
+    // cprintf("boot_pgdir  virtual addr ==>[%08lx]\n",boot_pgdir);//c01b9000
     boot_cr3 = PADDR(boot_pgdir);
-    cprintf("boot_cr3 physical addr ==>[%08lx]\n",boot_cr3);//001b9000
+    // cprintf("boot_cr3 physical addr ==>[%08lx]\n",boot_cr3);//001b9000
     // c01b9000(virtual addr) - 001b9000(physical addr)  = 0xC0000000 stage 2 映射关系
 
     check_pgdir();
 
     static_assert(KERN_BASE % PT_SIZE == 0 && KERN_TOP % PT_SIZE == 0);
-    cprintf("Test passed \n");
 
 
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
-    cprintf("VPT(virtual page table) page directory index ==>%d \n",PDX(VPT));
-    cprintf("000 boot_pgdir ==>[%08lx]\n",boot_pgdir);
     boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;//PDX(VPT) = 1003
-    cprintf("111 boot_pgdir ==>[%08lx] \n",boot_pgdir);
     // step 5--> 建立一一映射关系的二级页表
     // map all physical memory to linear memory with base linear addr KERN_BASE
     //linear_addr KERN_BASE~KERN_BASE+KMEMSIZE = phy_addr 0~KMEMSIZE
     //But shouldn't use this map until enable_paging() & gdt_init() finished.
     boot_map_segment(boot_pgdir, KERN_BASE, KMEMSIZE, 0, PTE_W);
-    cprintf("222 boot_pgdir ==>[%08lx]\n",boot_pgdir);
 
     //temporary map:
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M
-    cprintf("page directory index ==>%d \n",PDX(KERN_BASE));
+    // cprintf("page directory index ==>%d \n",PDX(KERN_BASE));
     boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768
     // step 6--> 使能分页机制
     enable_paging();

@@ -8,7 +8,6 @@
 #define _LIBS_X86_H
 
 #include <defs.h>
-#include <stdio.h>
 
 #define do_div(n, base) ({                                      \
     unsigned long __upper, __low, __high, __mod, __base;        \
@@ -272,7 +271,6 @@ lcr3(uintptr_t cr3)
         : "r" (cr3) 
         : "memory"
     );
-    cprintf("cr3 ==>[%08lx]\n",cr3);
 }
 
 static inline uintptr_t
@@ -285,7 +283,6 @@ rcr0(void)
         :
         : "memory"
     );
-    cprintf("cr0 ==>[%08lx]\n",cr0);
     return cr0;
 }
 

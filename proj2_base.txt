@@ -1,4 +1,370 @@
 # proj 2
+/************************************************************************/
+
+
+# 实验执行流程概述
+
+  proj2 主要完成了 os kernel 对物理内存的管理工作. 总控函数 kern_init(). 
+  
+  首先, bootloader 的工作有增加 , 在 bootloader 中, 完成了对物理内存资源的探测工作,让 os
+  kernel 在后续执行中能够基于 bootloader 探测出的物理内存情况进行物理内存管理初始化工作.
+
+  其次, bootloader 不像 proj1 那样,直接调用 kern_init(), 而是先调用 kern_enty函数 (汇编),
+  kern_enty() 的主要任务是为了执行 kern_init() 建立一个良好的 C 语言运行环境(设置堆栈),而完成这些
+  工作后,才调用 kern_init().
+
+
+   为了完成物理内存管理，这里首先需要探测可用的物理内存资源； 了解到物理内存位于什么地方 ？ 有多大
+   之后，就以固定页面大小来划分整个物理内存空间，并准备以此为最小内存分配单位来管理整个物理内存，管理
+   在内核运行过程中每页内存,设定其可用状态(free | used | reserved)，这其实就对应了我们在课本上讲
+   到的连续内存分配概念和原理的具体实现;   接着 os kernel 就要建立页表，启动分页机制，让 CPU 的 
+   MMU 把预先建立好的页表中的页表项 PTE 读入到 TLB 中，根据页表项 PTE 描述的虚拟页 （Page）与
+   物理页帧(Page Frame) 的对应关系完成 CPU 对内存的读写和执行操作。  
+
+   这一部分其实就对应了我们在课本上讲到内存映射、页表、多级页表等概念和原理的具体实现。
+
+   1 ==> 初始化物理内存页管理器框架 pmm_manager ;
+   2 ==> 建立空闲的 page 链表, 这样就可以分配以页 4kb 为单位的空闲内存了;
+   3 ==> 检查物理内存页分配算法;
+   4 ==> 为确保切换到分页机制后,代码能够正常执行,先建立一个临时二级页表;
+   5 ==> 建议一一映射关系的二级页表;
+   6 ==> 使能分页机制;
+   7 ==> 从新设置全局段描述符表;
+   8 ==> 取消临时二级页表;
+   9 ==> 检查页表建立是否正确;
+   10 ==> 通过自映射机制完成页表的打印输出.
+
+/************************************************************************/
+/************************************************************************/
+
+/****************************************************************************/
+
+### 1 ===> 探测物理内存分布和大小的方法
+
+OS kernel 需要知道了解整个计算机系统中的物理内存如何分布, 哪些可用,哪些不可用.
+基本方法是通过 BIOS 中断调用来帮助完成的. 其中 BIOS 中断调用必须在实模式下进行,
+所以在 bootoader 进入保护模式前完成这部分工作相对比较合适. 
+这部分功能由 boot/bootasm.S 中  probe_memory ~~~~~ finish_memory 处的代码
+完成. 
+通过 BIOS 中断获取内存可调用参数为 0xE820 的 INT 0x15 号 BIOS 中断.
+BIOS 通过系统内存映射描述符 (Address Range Descriptor) 格式来表示系统物理内存布局:
+
+offset           size         Descriptor
+00h              8byte        # 系统内存块基地址
+08h              8byte        # 系统内存大小
+10h              4byte        # 内存类型 
+
+
+/****************************************************************************/
+
+
+### 2 ===> 以页为单位管理物理内存
+
+## struct Page
+
+在获得 available physical addr 范围后,系统需要建立相应的数据结构来管理 以物理页(4kb 对齐,4kb 大小)
+为最小单位的整个物理内存, 以配合后续涉及的分页管理机制. 每一个物理页可以用一个 struct Page 来表示. 由
+于一个物理页需要占用一个 struct Page 的内存空间, struct Page 设计时必须尽可能的小.
+以页为单位的物理内存分配管理的实现算法在 kern/default_pmm.
+
+为了与以后的分页机制配合,需要先建立对整个计算机的每一个物理页的属性 struct Page ,包含了映射此物理页的
+虚拟页个数 ref;描述物理页属性的 flags 和 双向链接各个 struct Page 的 page_link 双向链表.
+
+
+## struct free_area_t
+
+   在初始情况下,也许物理内存的空闲物理页都是连续的,这样就形成一个大的连续内存空闲块.
+   但伴随着物理页的分配与释放,这个大的连续内存空闲块会分裂为一系列地址不连续的多个小的连续内存空闲
+   块,并且每个连续内存空闲块内部的物理页是连续的.
+   
+   那么为了有效地管理这些小连续内存空闲块,所有的连续内存连续空闲块可用一个 双向链表管理起来,
+   便于分配和释放,为此定义了一个 struct free_area_t ,包含了一个 
+   list_entry_t 的双向链表指针(指向了空闲的物理页).
+
+
+有了这两个数据结构, kernel 就可以管理起来整个 以 Page 为单位的物理内存空间. 接下来需要解决两个问题：
+
+  A : ===> 管理页级物理内存空间所需的 struct Page 的内存空间从哪里开始,占用多大空间？
+  B : ===> 空闲内存空间的起始地址在哪里？
+
+  对于这两个问题,我们首先根据 bootloader 给出的内存布局信息找出最大的物理内存地址 maxpa (定义在 
+  page_init 函数中的局部变量),由于 x86 的起始物理内存地址为 0, 所以可以得知需要管理的物理页个数为  
+  
+                  npage = maxpa / PAGE_SIZE;
+
+  这样,我们就可以预估出 管理页级物理内存空间所需的 struct Page 的内存空间所需的 内存大小为
+
+                  sizeof(struct Page) * npage;
+
+   由于 bootloader load kernel elf 的结束地址(用全局指针变量 end 记录)以上的空间没有被使用,所以我
+   们可以把 end 按 Page 大小为边界取整后,作为管理页级物理内存空间所需的 struct Page 的内存空间, 记
+   为:
+   
+            pages = (struct Page *)ROUNDUP ((void*)end, PAGE_SIZE);
+
+
+   为了简化,从 addrA =0 到 addrB = pages + sizeof(struct Page) * npage 结束的物理内存空间设定
+   为已占用物理内存空间 (起始 0 ~ 640KB 的空间是空闲的), addrB 以上的空间为空闲物理内存空间,这时的空
+   闲空间起始(物理)地址为
+   
+   uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
+
+   为此我们需要把这两部分空间给标识出来。首先，对于所有物理空间，通过下面的代码实现占用标记 :
+
+    for (i=0;i<npage;i++) {
+        SetPageReserved(pages + i);
+    }
+
+    然后，根据探测到的空闲物理空间，通过下面语句实现空闲标记：
+
+    for (i=0;i<memmap->nr_map;i++) {
+        uint64_t begin = memmap->map[i].addr;
+        uint64_t end = begin + memmap->map[i].size;
+        if (memmap->map[i].type == E820_KERN) {
+            if (begin < freemem) {
+                begin = freemem;
+            }
+            if (end > KMEMSIZE) {
+                end = KMEMSIZE;
+            }
+            if (begin < end) {
+                begin = ROUNDUP(begin, PAGE_SIZE);
+                end = ROUNDDOWN(end, PAGE_SIZE);
+                if (begin < end) {
+                    // [001b9000, 07fe0000]
+                    // cprintf("begin~end [%08llx, %08llx]\n",begin,end);
+                    // 根据探测到的空闲物理空间,设置空闲标记,获得空闲空间的起始地址和结束地址
+                    init_memmap(pa2page(begin), (end - begin) / PAGE_SIZE);
+                }
+            }
+        }
+    }
+
+    SetPageReserved 宏只需把物理地址对应的 Page 结构中的 flags 标志设置为 PG_reserved,
+    表示这些 page 已经被使用了,将来不能被用于分配。  而 init_memmap 函数则是把空闲物理页对应
+    的 struct Page 中的 flags 和 ref = 0，并加到 free_area.free_list 指向的双向列表中,
+    为将来的空闲页管理做好初始化准备工作.
+
+    关于内存分配的 os 原理的知识很多,但是在 proj2 中只实现了最简单的内存页分配算法.  相应的实现
+    在 default_pmm.c 中的 default_alloc_pages 函数和 deafault_free_pages 函数,相关实现
+    很简单. 直接看源码,应该很好理解.
+
+/****************************************************************************/
+/****************************************************************************/
+
+### 物理内存页分配算法实现
+
+  要在 os kernel 中实现连续物理内存分配算法,则需要考虑的事情比较多,想对课本上的物理内存分配算法
+  描述要复杂不少。 
+
+  下面介绍一下如果要实现一个 First-fit 内存分配算法得大致流程。
+
+  proj 2 的第一部分是完成 First-fit 的分配算法。 first-fit 算法原理很简单.
+
+  First-fit 分配算法需要维护一个查找有序(addr 按照 从小到大排列) 空闲块 (以 page 为最小单位的整
+  个物理内存连续地址空间) 的数据结构，而双向链表是一个很好的选择。
+
+typedef struct {
+    list_entry_t free_list;//空闲块双向链表的头; the list header 
+    unsigned int nr_free;  //记录当前空闲页的个数; # of free pages in this free list
+} free_area_t;
+
+ 显然,我们可以通过此数据结构来完成对空闲块的管理. 而 default_pmm.c 中定义 free_area_t free_area 变量就是干这个事情的;
+
+
+
+
+#### first-fit 设计实现
+
+default_init_memmap 函数将根据每个物理页帧的情况来建立空闲页链表,且空闲页块应该是
+根据地质高低形成一个有序链表.
+
+static void
+default_init_memmap(struct Page *base, size_t n)
+{
+    assert(n > 0);
+    struct Page *p = base;
+    for (; p != base + n; p ++) {
+        assert(PageReserved(p)); //确认本页是否为保留页
+        p->flags = 0; 	//设置标志位
+        SetPageProperty(p);
+        p->property = 0;
+        set_page_ref(p, 0); //清空引用
+        list_add_before(&free_list, &(p->page_link));//插入空闲页的链表里面
+    }
+    nr_free += n;//说明连续有n个空闲块,属于空闲链表
+    //first block
+    base->property = n;//连续内存空闲块的大小为n,属于物理页管理链表
+}
+
+如果要分配一个页,那要考虑哪些呢？ 这里就需要考虑实现 default_alloc_pages 函数,注意参数 n 
+表示要分配 n 个页。 另外需要尽量多考虑一些边界情况,这样确保软件的鲁棒性.
+
+/* 
+ * n : 需要分配 n 个 page.
+ * 从空闲页块的链表中去遍历,找到第一块大小大于n的块,然后分配出来,把它从空闲页链表中除去,
+ * 然后如果有多余的,把分完剩下的部分再次加入会空闲页链表中即可.
+ * */
+static struct Page *
+default_alloc_pages(size_t n)
+{
+    assert(n > 0);
+    //如果所有的空闲页的加起来的大小都不够,那直接返回NULL
+    if (n > nr_free) {  
+        return NULL;
+    }
+    list_entry_t *le = &free_list; //从空闲块链表的头指针开始
+    list_entry_t *next_le;
+    //依次往下寻找直到回到头指针处,即已经遍历一次
+    while((le=list_next(le)) != &free_list) { 
+        //将地址转换成页的结构
+        struct Page *p = le2page(le, page_link); 
+        //由于是first-fit,则遇到的第一个大于等于N的块就选中即可
+        if(p->property >= n) {  
+            int i;
+            // 找到 first fit block 后,就要从新组织空闲块,然后把找到的 page 返回.
+            for(i=0; i<n; i++) {
+                next_le = list_next(le); //下一个空闲块
+                struct Page *pp = le2page(le, page_link);//下一个空闲块对应的 page
+                SetPageReserved(pp);
+                ClearPageProperty(pp);
+                list_del(le);
+                le = next_le;
+            }
+            //如果分配的多了需要剔除
+            if(p->property>n) {
+                //如果选中的第一个连续的块大于n,只取其中的大小为n的块
+                (le2page(le,page_link))->property = p->property - n;
+            }
+            ClearPageProperty(p);
+            SetPageReserved(p);
+            //当前空闲页的数目减n
+            nr_free -= n;  
+            return p;
+        }
+    }
+    //没有大于等于n的连续空闲页块,返回空
+    return NULL;
+}
+
+first-fit 需要从空闲链表头开始查找最小的地址,通过 list_next 找到下一个空闲块元素,通过 le2page
+宏可以由链表元素获得对应的 Page 指针 p。
+
+/****************************************************************************/
+### 建立段页式管理中需要考虑的关键问题
+
+为了实现分页机制,需要建立好 virtual memory 与 physical memory 的映射关系,即正确建立二级页表.
+此过程涉及硬件细节,不同的地址映射关系组合,相对比较复杂.  总体而言,我们需要思考以下几个问题:
+
+##### 1==> 如何在建立页表的过程中维护 GDT 和 Page Table 之间的关系, 确保 kernel 能够在
+           各个时间段上都能正常寻址?
+
+      2==> 对于哪些物理内存空间需要建立 页映射关系?
+
+      3==> 具体的 页映射关系 是什么？
+
+      4==> PDE 页目录表的起始地址设置在哪里？
+
+      5==> PTE 页表的起始地址设置在哪里,需要多大的空间?
+
+      6==> 如何设置 PDE 的内容?
+
+      7==> 如何设置 PTE 的内容？
+
+/****************************************************************************/
+
+#### 建立虚拟页和物理页帧的地址映射关系
+https://blog.csdn.net/liutianshx2012/article/details/52398144
+## 页表项结构 (PDE & PTE)
+
+1==> 分页转换功能由驻留在内存中的表来描述,该表称为页表（page table）,存放在物理地址空间中.页表可以看作是简单的2^20 物理地址数组.线性地址到物理地址的映射功能可以简单地看作是进行数组查找.线性地址的高20bit 构成了这个数组的索引值,用于选择对应页面的物理(基)地址.线性地址的低12bit 给出了页面中的偏移量,加上页面的基地址最终形成对应的物理地址.由于页面基地址对齐在4K 边界上,因此页面基地址的低12 bit 肯定是0. 这意味着 高 20 bit的页面基地址 和 12 bit 偏移量连接组合在一起就能得到对应的物理地址.
+
+2==> 页表中每个页表项大小为 32 bit. 由于只需要其中的20 bit来存放页面的物理基地址,因此剩下的12 bit 可以用于存储诸如页面是否存在等属性信息.如果线性地址索引的页表项被标注为存在的,则表示该项即有效,我们可以从中取得页面的物理地址.如果项中表明不存在,那么当访问对应物理页面时就会产生一个异常.
+
+###  建立二级页表
+         
+由于我们已经具有了一个物理内存页管理器 default_pmm_manager, 我们就可以用它来获得所需的 free 
+physical page. 在二级页表结构中,页目录表(PDT)占 4KB 空间, kernel 就可通过 alloc_page 函数获得
+一个空闲物理页,这个页的起始物理地址就是 页目录表(PDT) 的起始地址.
+    
+同理,kernel 也通过这种方式获得 一个 页表(PT) 所需的 4KB 空间.
+
+整个 PDT 和 PT 所占内存大小取决于 二级页表要管理和映射的 物理页数.
+假设当前物理内存 0~ 16MB, 每个页帧(page frame) = 4kb,则用 16^20 / 4^10 = 4096 个物理页,也就意
+味着有 4 个 PDE (Page Directory Entry) 和 4096 个 PTE(Page Table Entry) 需要设置. 每一个
+
+PDE 和 PTE 大小均为 4B . 即使只有 4 个 PDE 也需要一个完整的 PDT(4kb) 装.  而 4096 个 PTE 需要 16kb (4096 * 4B),也就是 4 个 page frame.  
+
+所以对 16MB 的物理页建立一一映射的 16MB 的虚拟页,需要 5 个物理页, 即 20KB 的空间来生成二级页表.
+
+
+计算过程：
+
+要映射物理内存 16MB , page frame size = 4KB , 能分配多少 page frame ?
+
+step 1 ===>  16MB / 4KB = 4096 个 
+
+每一个 page frame 需要 一个 PTE 描述, PTE size = 4B,存 4096 个 PTE 需要内存大小？
+
+step 2 ===> 4096 * 4B = 16KB 
+
+每一个 PT 能存 1024 个 PTE , 4096 个 PTE 需要多少个 PT 描述？ PT 需要内存大小 ？
+
+step 3 ===> 4096 / 1024 = 4 个 ;  每个 PT 占4KB  4 * 4KB = 16KB 
+
+每一个 PDT 能存 1024 个 PDE , 每一个 PDE 描述一个 PT , 4 个 PT 需要 1个 PDT .
+描述 4096 个 page frame 需要 1个 PDT , 4个 PT 
+
+step 4 ===> 4KB + 4KB * 4 = 20KB 
+
+
+算法:  管理的物理页数 n, 需要 PDT 和 PT 所占的总内存为  (4096 + 4 ∗ n) Byte.
+
+
+为了把 0 ~ KMEMSIZE (0x38000000 = 896MB, 代入上面公式 n = 229375 个 page frame.) 的物理
+内存一一映射到 PDE 和 PTE 的内容,其大致流程如下:
+
+1 ==> alloc_page 获得一个 free page frame, 用于 PDT;
+
+2 ==> boot_map_segment 建立一一映射关系,具体处理过程以 page frame 为单位进行设置,即 
+      virtual addr = phy addr + 0xC000 0000
+
+      设一个 32bit linear addr  la 有一个对应的 32bit phy addr pa, 如果以 la 的 high 10bit 
+      为索引值的 PDT 中存在位 PTE_P =0, 表示缺少对应的 PT 空间,则需要 alloc_page 获得新的一个 
+      free page frame 给 PT, PT 的起始 phy addr 是 4kb 对齐,这样填写 PDE 的内容为
+
+      页目录项内容 = （页表起始物理地址 & ~0xfff）| PTE_U | PTE_W | PTE_P 
+
+      进一步对于 PT 中以 linear addr la 中10bit 为索引值 对应 PTE 的内容为
+
+      页表项内容 = （pa & ~0xfff）| PTE_W | PTE_P 
+
+3 ==> PTE_U: 位3,表示用户态的软件可以读取对应地址的物理内存页内容
+
+4 ==> PTE_W: 位2,表示物理内存页内容可写
+
+5 ==> PTE_P: 位1,表示物理内存页存在
+
+
+
+ +--------10------+-------10-------+---------12----------+
+ | Page Directory |   Page Table   | Offset within Page  |
+ |      Index     |     Index      |                     |
+ +----------------+----------------+---------------------+
+ |--- PDX(la) ----|---- PTX(la) ---|---- PGOFF(la) ------|
+ |----------- PPN(la) -------------|
+
+pde_t 全称为page directory entry,也就是一级页表的表项（注意：pgdir实际不是表项,而是一级页表本身,pgdir给出页表起始地址.）
+pte_t 全称为page table entry,表示二级页表的表项.
+uintptr_t 表示为线性地址,由于段式管理只做直接映射,所以它也是逻辑地址.
+
+
+
+
+/****************************************************************************/
+
+/************************************************************************/
+/************************************************************************/
 
 1、x86特权级------段选择子
 (1)、在保护模式下,特权级总共有4个,编号从 0(最高特权)到3(最低特权).三类主
@@ -38,124 +404,7 @@ CR3寄存器 的内容是对应页目录表的物理基地址；页目录表可�
 需要注意的是,在设置完映射关系之后,又取消了第二个映射关系原因是为实现对等映射,更新了GDT表项之后,第二个映射就没有意义了,所以需要unmap.
 
 
-/****************************************************************************/
 
-### 1 ===> 探测物理内存分布和大小的方法
-
-OS kernel 需要知道了解整个计算机系统中的物理内存如何分布, 哪些可用,哪些不可用.
-基本方法是通过 BIOS 中断调用来帮助完成的. 其中 BIOS 中断调用必须在实模式下进行,
-所以在 bootoader 进入保护模式前完成这部分工作相对比较合适. 
-这部分功能由 boot/bootasm.S 中  probe_memory ~~~~~ finish_memory 处的代码
-完成. 
-通过 BIOS 中断获取内存可调用参数为 0xE820 的 INT 0x15 号 BIOS 中断.
-BIOS 通过系统内存映射描述符 (Address Range Descriptor) 格式来表示系统物理内存布局:
-
-offset           size         Descriptor
-00h              8byte        # 系统内存块基地址
-08h              8byte        # 系统内存大小
-10h              4byte        # 内存类型 
-
-
-/****************************************************************************/
-
-
-### 2 ===> 以页为单位管理物理内存
-
-## struct Page
-
-在获得 available physical addr 范围后,系统需要建立相应的数据结构来管理 以物理页(4kb 对齐,4kb 大小)
-为最小单位的整个物理内存, 以配合后续涉及的分页管理机制. 每一个物理页可以用一个 struct Page 来表示. 由
-于一个物理页需要占用一个 struct Page 的内存空间, struct Page 设计时必须尽可能的小.
-以页为单位的物理内存分配管理的实现算法在 kern/default_pmm.
-
-为了与以后的分页机制配合,需要先建立对整个计算机的每一个物理页的属性 struct Page ,包含了映射此物理页的
-虚拟页个数 ref;描述物理页属性的 flags 和 双向链接各个 struct Page 的 page_link 双向链表.
-
-
-## struct free_area_t
-
-   在初始情况下,也许物理内存的空闲物理页都是连续的,这样就形成一个大的连续内存空闲块.
-   但伴随着物理页的分配与释放,这个大的连续内存空闲块会分裂为一系列地址不连续的 多个小的连续内存空闲块,并
-   且每个连续内存空闲块内部的物理页是连续的.    那么为了有效地管理这些小连续内存空闲块,所有的连续内存连
-   续空闲块可用一个 双向链表管理起来, 便于分配和释放,为此定义了一个 struct free_area_t ,包含了一个 
-   list_entry_t 的双向链表指针(指向了空闲的物理页).
-
-
-有了这两个数据结构, kernel 就可以管理起来整个 以 Page 为单位的物理内存空间. 接下来需要解决两个问题：
-
-  A : ===> 管理页级物理内存空间所需的 struct Page 的内存空间从哪里开始,占用多大空间？
-  B : ===> 空闲内存空间的起始地址在哪里？
-
-  对于这两个问题,我们首先根据 bootloader 给出的内存布局信息找出最大的物理内存地址 maxpa (定义在 
-  page_init 函数中的局部变量),由于 x86 的起始物理内存地址为 0, 所以可以得知需要管理的物理页个数为  
-  
-                  npage = maxpa / PAGE_SIZE;
-
-  这样,我们就可以预估出 管理 页级物理内存空间所需的 struct Page 的内存空间所需的 内存大小为
-
-                  sizeof(struct Page) * npage;
-
-   由于 bootloader load kernel elf 的结束地址(用全局指针变量 end 记录)以上的空间没有被使用,所以我
-   们可以把 end 按 Page 大小为边界取整后,作为管理页级物理内存空间所需的 struct Page 的内存空间, 记
-   为:
-   
-            pages = (struct Page *)ROUNDUP ((void*)end, PAGE_SIZE);
-
-
-   为了简化,从 addrA =0 到 addrB = pages + sizeof(struct Page) * npage 结束的物理内存空间设定
-   为已占用物理内存空间 (起始 0 ~ 640KB 的空间是空闲的), addrB 以上的空间为空闲物理内存空间,这时的空
-   闲空间起始(物理)地址为
-   
-   uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
-
-
-
-
-/****************************************************************************/
-### 建立段页式管理中需要考虑的关键问题
-
-为了实现分页机制,需要建立好 virtual memory 与 physical memory 的映射关系,即正确建立二级页表.
-此过程涉及硬件细节,不同的地址映射关系组合,相对比较复杂.  总体而言,我们需要思考以下几个问题:
-
-##### 1==> 如何在建立页表的过程中维护 GDT 和 Page Table 之间的关系, 确保 kernel 能够在各个时间段
-           上都能正常寻址?
-
-      2==> 对于哪些物理内存空间需要建立 页映射关系?
-
-      3==> 具体的 页映射关系 是什么？
-
-      4==> PDE 页目录表的起始地址设置在哪里？
-
-      5==> PTE 页表的起始地址设置在哪里,需要多大的空间?
-
-      6==> 如何设置 PDE 的内容?
-
-      7==> 如何设置 PTE 的内容？
-
-/****************************************************************************/
-####    管理页级物理内存空间所需的 struct Page 的内存空间从哪里开始, 占多大空间 ?
-        空闲内存空间的起始地址在哪里 ？
-
-        在 page_init 函数中计算, bootloader 给出的硬件内存布局信息,找出最大 phys addr = maxpa,
-        由于 x86 的起始 phys addr = 0, 可以计算出需要管理的最大 phys page frame 的个数 为
-        
-                  npage = maxpa / PAGE_SIZE; //32736
-
-        进一步可以计算出 这些 phys page frame 需要占用的 内存大小为
-        
-                  sizeof(struct Page) * npage = 639KB
-
-        bootloader 加载 kernel elf 的结束地址 .end 以上的空间是没有被使用的,
-        可以把 end 按 page size 为边界取整后,作为管理页级 phys addr 所需的 struct page 的内存空间.
-        pages = (struct Page *)ROUNDUP((void*)end, PAGE_SIZE);
-
-        为了简单, 从 0 ~ pages + sizeof(struct Page) * npage) 之间的物理内存空间设定为 已占用的物理内存(存储了 npage 个 struct Page )  起始 0 ~~~ 640KB 是空闲的 , pages + sizeof(struct Page) * npage) 以上的空间为 空闲物理内存空间, 这时的空闲空间起始地址为
-
-      uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
-
-
-
-/****************************************************************************/
 
 
 #### 系统执行中地址映射的四个阶段
@@ -228,95 +477,7 @@ proj2 ===>  kernel ELF link addr = 0xC010 0000,这个地址也是 virtual addr. 
 
 
 /****************************************************************************/
-#### 建立虚拟页和物理页帧的地址映射关系
-https://blog.csdn.net/liutianshx2012/article/details/52398144
-## 页表项结构 (PDE & PTE)
 
-1==> 分页转换功能由驻留在内存中的表来描述,该表称为页表（page table）,存放在物理地址空间中.页表可以看作是简单的2^20 物理地址数组.线性地址到物理地址的映射功能可以简单地看作是进行数组查找.线性地址的高20bit 构成了这个数组的索引值,用于选择对应页面的物理(基)地址.线性地址的低12bit 给出了页面中的偏移量,加上页面的基地址最终形成对应的物理地址.由于页面基地址对齐在4K 边界上,因此页面基地址的低12 bit 肯定是0. 这意味着 高 20 bit的页面基地址 和 12 bit 偏移量连接组合在一起就能得到对应的物理地址.
-
-2==> 页表中每个页表项大小为 32 bit. 由于只需要其中的20 bit来存放页面的物理基地址,因此剩下的12 bit 可以用于存储诸如页面是否存在等属性信息.如果线性地址索引的页表项被标注为存在的,则表示该项即有效,我们可以从中取得页面的物理地址.如果项中表明不存在,那么当访问对应物理页面时就会产生一个异常.
-
-##  建立二级页表
-         
-由于我们已经具有了一个物理内存页管理器 default_pmm_manager, 我们就可以用它来获得所需的 free 
-physical page. 在二级页表结构中,页目录表(PDT)占 4KB 空间, kernel 就可通过 alloc_page 函数获得
-一个空闲物理页,这个页的起始物理地址就是 页目录表(PDT) 的起始地址.
-    
-同理,kernel 也通过这种方式获得 一个 页表(PT) 所需的 4KB 空间.
-
-整个 PDT 和 PT 所占内存大小取决于 二级页表要管理和映射的 物理页数.
-假设当前物理内存 0~ 16MB, 每个页帧(page frame) = 4kb,则用 16^20 / 4^10 = 4096 个物理页,也就意
-味着有 4 个 PDE (Page Directory Entry) 和 4096 个 PTE(Page Table Entry) 需要设置. 每一个
-
-PDE 和 PTE 大小均为 4B . 即使只有 4 个 PDE 也需要一个完整的 PDT(4kb) 装.  而 4096 个 PTE 需要 16kb (4096 * 4B),也就是 4 个 page frame.  
-
-所以对 16MB 的物理页建立一一映射的 16MB 的虚拟页,需要 5 个物理页, 即 20KB 的空间来生成二级页表.
-
-
-计算过程：
-
-要映射物理内存 16MB , page frame size = 4KB , 能分配多少 page frame ?
-
-step 1 ===>  16MB / 4KB = 4096 个 
-
-每一个 page frame 需要 一个 PTE 描述, PTE size = 4B,存 4096 个 PTE 需要内存大小？
-
-step 2 ===> 4096 * 4B = 16KB 
-
-每一个 PT 能存 1024 个 PTE , 4096 个 PTE 需要多少个 PT 描述？
-
-step 3 ===> 4096 / 1024 = 4 个
-
-每一个 PDT 能存 1024 个 PDE , 每一个 PDE 描述一个 PT , 4 个 PT 需要 1个 PDT .
-描述 4096 个 page frame 需要 1个 PDT , 4个 PT 
-
-step 4 ===> 4KB + 4KB * 4 = 20KB 
-
-
-算法:  管理的物理页数 n, 需要 PDT 和 PT 所占的总内存为  (4096 + 4 ∗ n) Byte.
-
-
-为了把 0 ~ KMEMSIZE (0x38000000 = 896MB, 代入上面公式 n = 229375 个 page frame.) 的物理
-内存一一映射到 PDE 和 PTE 的内容,其大致流程如下:
-
-1 ==> alloc_page 获得一个 free page frame, 用于 PDT;
-
-2 ==> boot_map_segment 建立一一映射关系,具体处理过程以 page frame 为单位进行设置,即 
-      virtual addr = phy addr + 0xC000 0000
-
-      设一个 32bit linear addr  la 有一个对应的 32bit phy addr pa, 如果以 la 的 high 10bit 
-      为索引值的 PDT 中存在位 PTE_P =0, 表示缺少对应的 PT 空间,则需要 alloc_page 获得新的一个 
-      free page frame 给 PT, PT 的起始 phy addr 是 4kb 对齐,这样填写 PDE 的内容为
-
-      页目录项内容 = （页表起始物理地址 & ~0xfff）| PTE_U | PTE_W | PTE_P 
-
-      进一步对于 PT 中以 linear addr la 中10bit 为索引值 对应 PTE 的内容为
-
-      页表项内容 = （pa & ~0xfff）| PTE_W | PTE_P 
-
-3 ==> PTE_U: 位3,表示用户态的软件可以读取对应地址的物理内存页内容
-
-4 ==> PTE_W: 位2,表示物理内存页内容可写
-
-5 ==> PTE_P: 位1,表示物理内存页存在
-
-
-
- +--------10------+-------10-------+---------12----------+
- | Page Directory |   Page Table   | Offset within Page  |
- |      Index     |     Index      |                     |
- +----------------+----------------+---------------------+
- |--- PDX(la) ----|---- PTX(la) ---|---- PGOFF(la) ------|
- |----------- PPN(la) -------------|
-
-pde_t 全称为page directory entry,也就是一级页表的表项（注意：pgdir实际不是表项,而是一级页表本身,pgdir给出页表起始地址.）
-pte_t 全称为page table entry,表示二级页表的表项.
-uintptr_t 表示为线性地址,由于段式管理只做直接映射,所以它也是逻辑地址.
-
-
-
-
-/****************************************************************************/
 
 
 

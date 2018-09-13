@@ -137,7 +137,7 @@ struct Page
 };
 
 /* Flags describing the status of a page frame */
-#define PG_reserved                 0       // the page descriptor is reserved for kernel or unusable 此页是否被保留, 该 bit =1,则为保留页,不能放到空闲链表中,即这样的页不是空闲页,不能动态分配与释放. 比如目前kernel code 占用的空间就是属于这样"被保留"的页.
+#define PG_reserved                 0       // the page descriptor is reserved for kernel or unusable 此页是否被保留, 该 bit =1,则为保留页,不能放到空闲链表中,即这样的页不是空闲页,不能动态分配与释放. 比如目前 kernel code 占用的空间就是属于这样"被保留"的页.
 #define PG_property                 1       // the member 'property' is valid 该bit 表示此页是否是 free 的,如果设置为1,表示该页是 free 的,可以被分配; 如果设置0,表示该页已经被分配出去了,不能二次分配.  物理内存分配算法(best fit | buddy system |等)不同, PG_property 含义不同.
 
 //将Page->flags 设置为 PG_reserved,表示这些页已经被使用了,将来不能被用于分配.
@@ -160,8 +160,8 @@ struct Page
 */
 
 typedef struct {
-    list_entry_t free_list;// the list header
-    unsigned int nr_free;  //记录当前空闲页的个数; # of free pages in this free list
+    list_entry_t free_list;//空闲块双向链表的头; the list header 
+    unsigned int nr_free;  //空闲块的总数(以 page 为单位); # of free pages in this free list
 } free_area_t;
 
 #endif /* !__ASSEMBLER__ */

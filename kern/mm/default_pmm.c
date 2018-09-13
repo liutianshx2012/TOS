@@ -30,6 +30,7 @@ default_init(void)
  n  : 页个数
  根据每个 phys page frame 的情况来建立空闲页链表,且空闲页块应该是根据 地址高低形成一个有序链表.
 */
+// kern_init --> pmm_init --> init_memmap --> pmm_manager->init
 static void
 default_init_memmap(struct Page *base, size_t n)
 {
@@ -206,7 +207,7 @@ basic_check(void)
     free_page(p2);
 }
 
-// proj 2: below code is used to check the first fit allocation algorithm (your code 1)
+// proj 2: below code is used to check the first fit allocation algorithm
 static void
 default_check(void)
 {

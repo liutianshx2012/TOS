@@ -215,7 +215,7 @@ qemu: $(TOSIMG)
 TERMINAL       :=bash
 debug: $(TOSIMG)
 	$(V)$(QEMU) -S -s -parallel stdio $(QEMUOPTS) -serial null &
-	$(V)sleep 20
+	$(V)sleep 2
 	$(V)$(TERMINAL) -e "$(GDB) -q -x tools/gdbboot"
 
 .PHONY: clean

@@ -1,3 +1,3 @@
 # boot block
 # kernel elf
-# physical memory | page framw
+# physical memory | page framework
