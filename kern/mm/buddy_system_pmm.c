@@ -1,8 +1,6 @@
 #include <pmm.h>
 #include <list.h>
 #include <string.h>
-#include <default_pmm.h>
-
 
 #define LEFT_LEAF(index) ((index) * 2 + 1)
 #define RIGHT_LEAF(index) ((index) * 2 + 2)
@@ -73,7 +71,7 @@ fixtree(int index,int n)
 	int l = bu[index].left;
 	int r = bu[index].right;
 	//cprintf("l:%d,r:%d,log:%d\n",l,r,bu[index].longest);
-	int mid = (l+r)>>1;
+	// int mid = (l+r)>>1;
 	if (r < n) {
         return;
     }
@@ -91,7 +89,7 @@ fixtree(int index,int n)
 static void
 buddy_init_memmap(struct Page *base, size_t n) 
 {
-	cprintf("\n----------------------------init_memap total_free_page:%d\n",n);
+	cprintf("\n----------------------------init_memap total_free_page:%d\n",(int)n);
     assert(n > 0);
 	total = fixsize(n);
 	treebase = base;
@@ -191,7 +189,7 @@ freetree(int index, int pos, int size)
 {
 	int l = bu[index].left;
 	int r = bu[index].right;
-	int longest = bu[index].longest;
+	// int longest = bu[index].longest;
 	bool free =bu[index].free;
 	if (free==1) {
 		bu[index].longest=r-l+1;
