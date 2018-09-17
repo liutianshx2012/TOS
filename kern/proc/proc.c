@@ -1034,12 +1034,10 @@ do_sleep(unsigned int time)
     }
     bool intr_flag;
     local_intr_save(intr_flag);
-    {
-        timer_t __timer, *timer = timer_init(&__timer, current, time);
-        current->state = PROC_SLEEPING;
-        current->wait_state = WT_TIMER;
-        add_timer(timer);
-    }
+    timer_t __timer, *timer = timer_init(&__timer, current, time);
+    current->state = PROC_SLEEPING;
+    current->wait_state = WT_TIMER;
+    add_timer(timer);
     local_intr_restore(intr_flag);
 
     schedule();
