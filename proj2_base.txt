@@ -318,19 +318,18 @@ step 3 ===> 4096 / 1024 = 4 个 ;  每个 PT 占4KB  4 * 4KB = 16KB
 step 4 ===> 4KB + 4KB * 4 = 20KB 
 
 
-算法:  管理的物理页数 n, 需要 PDT 和 PT 所占的总内存为  (4096 + 4 ∗ n) Byte.
-
 
 为了把 0 ~ KMEMSIZE (0x38000000 = 896MB, 代入上面公式 n = 229375 个 page frame.) 的物理
 内存一一映射到 PDE 和 PTE 的内容,其大致流程如下:
 
-1 ==> alloc_page 获得一个 free page frame, 用于 PDT;
+1 ==> alloc_page 获得一个 free page frame, 用于 PDT (4kb);
 
 2 ==> boot_map_segment 建立一一映射关系,具体处理过程以 page frame 为单位进行设置,即 
+      
       virtual addr = phy addr + 0xC000 0000
 
-      设一个 32bit linear addr  la 有一个对应的 32bit phy addr pa, 如果以 la 的 high 10bit 
-      为索引值的 PDT 中存在位 PTE_P =0, 表示缺少对应的 PT 空间,则需要 alloc_page 获得新的一个 
+      设一个 32bit linear addr la 有一个对应的 32bit phy addr pa, 如果以 la 的 high 10bit 
+      为索引值的 PDT 中存在位 PTE_P=0, 表示缺少对应的 PT 空间,则需要 alloc_page 获得新的一个 
       free page frame 给 PT, PT 的起始 phy addr 是 4kb 对齐,这样填写 PDE 的内容为
 
       页目录项内容 = （页表起始物理地址 & ~0xfff）| PTE_U | PTE_W | PTE_P 
@@ -346,6 +345,7 @@ step 4 ===> 4KB + 4KB * 4 = 20KB
 5 ==> PTE_P: 位1,表示物理内存页存在
 
 
+有一点需要注意，在页目录表 PDT 和 页表 PT 中存放的地址都是物理地址, 但是 PDT 与 PT 本身是 用 虚拟地址描述
 
  +--------10------+-------10-------+---------12----------+
  | Page Directory |   Page Table   | Offset within Page  |
@@ -359,7 +359,73 @@ pte_t 全称为page table entry,表示二级页表的表项.
 uintptr_t 表示为线性地址,由于段式管理只做直接映射,所以它也是逻辑地址.
 
 
+虚拟地址只有映射上了物理页才可以正常的读写。在完成映射物理页的过程中，除了要像上面那样在页表的
+对应表项上填上相应的物理地址外,还要设置正确的控制位。有关 x86 中页表控制位的详细信息清参考
+<<Intel 64 and IA-32 Architectures Software Developer's Manual -Volume 3A>> 4.11节
 
+
+只有当一级二级页表的 PTE 都设置了用户写权限后,用户才能对对应的物理地址进行读写。
+所以我们可以在一级页表首先给用户写权限，再在二级页表上面根据需要限制用户的权限，对
+物理页进行保护。   由于一个物理页可能被映射到不同的虚拟地址上去（譬如一块内存在不同进程间共享），
+当这个页需要在一个地址上解除映射时， os 不能直接把这个 page 回收，而是要先看看它还有没有映射
+到别的虚拟地址。  这是通过查找管理该物理页的 Page 数据结构的成员变量 ref 来实现的， 如果ref = 0，
+表示没有虚拟页到物理页的映射关系了， 就可以把这个物理页给回收了，从而这个物理页是 free 的了，可以
+再被分配。  page_insert() 函数将物理页映射在了页表上。  可参看 page_insert() 函数的实现来
+了解 os kernel 是如何维护这个变量的。  当不需要再访问这块虚拟地址时,可以把这块物理页回收并在
+将来用在其他地方。  取消映射由 page_remove() 来做，这其实是 page_insert() 的逆操作。
+
+
+建立好 一一映射的二级页表后，接下来就要使能分页机制了，这主要是通过 enable_page() 函数
+实现的，这个函数主要做了两件事：
+
+1 ==> lcr3 指令把页目录表的起始地址存入 CR3 寄存器中 physical address of boot-time page directory 
+
+2 ==> lcr0 指令把 CR0 中的 CR0_PG  设置
+
+执行完 enable_page 函数后, 计算机系统进入了分页模式! 但到这一步还没建立好完整的 段页式
+映射.   OS 在最开始通过 kern_enty 函数设置了临时的新段映射机制。 这个临时的新段映射不是
+最简单的对等映射, 导致虚拟地址 和 线性地址 不相等.  这里需要注意: 刚进入分页模式的时刻是
+一个过渡过程中, 虚拟地址，线性地址 以及 物理地址 之间的映射关系为 :
+
+    # linear addr 在  0  ~~ 4 MB 之外的 三者映射关系
+
+   stage 3 ==> vir addr -  0xC000 0000 = linear addr = phy addr + 0xC000 0000
+
+而我们希望的段页式映射的最终映射关系为:
+
+   stage 4 ==>  virt addr = linear addr = phy addr + 0xC000 0000
+
+这里最终的段映射是简单的段对等映射 (virt addr = linear addr). 我们需要进一步调整段映射关系
+，即重新设置新的  GDT ， 建立对等段映射。 这个特殊的阶段，如果不把段映射关系改为 virt addr = la
+，则通过段页式两次地址转换后, 无法得到正确的物理地址。
+
+
+为此我们需要进一步调用 gdt_init() 函数, 根据新的 gdt 全局段描述符表内容，恢复简单的段对等映射
+关系，即使得 virt addr = linear addr. 这样在执行完 gdt_init() 后，通过的段机制和页机制实现
+的地址映射关系为:
+
+  stage 4 ==>   vir addr = linear addr = phy addr + 0xC000 0000
+    
+这里存在一个问题是,在调用 enable_page() 函数到执行 gdt_init() 函数之前,内核使用的还是旧的段
+表映射, 即:
+
+  stage 3 ==> vir addr -  0xC000 0000 = linear addr = phy addr + 0xC000 0000
+
+如何保证此时内核依然能够正常工作呢？其实只需让 index=0 的页目录项 PDE 的内容等于以索引值
+为 (KERN_BASE >>22) 的目录表项的内容即可。   目前内核大小不超过 4MB (实际上是 3MB,因为内核
+从 0x10 0000 开始),这样就只需要让页表在 0 ~ 4MB 的线性地址与 KERN_BASE ~ KERN_BASE + 4MB
+的线性地址获得相同的映射即可,都映射到 0 ~ 4MB 的物理地址空间, 具体实现为:
+
+    boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768
+
+实际上这种映射 限制了内核的大小. 当内核大小超过预期的 3MB 就可能导致打开分页之后内核 crash,
+在后面的实验中,页的确出现了这种情况。解决方法同意简单,就是 copy 更多的高地址对应的页目录项 PDE
+内容到低地址对应的页目录项 PDE 中即可.
+
+当执行完成 gdt_init() 之后,新的段页式映射已经建立好了, 上面的 0 ~ 4MB 的线性地址与 
+0 ~ 4MB 的物理地址 一一映射关系已经没有用了.   所以可以通过 下面语句解除这个 老的映射关系.
+
+    boot_pgdir[0] = 0;
 
 /****************************************************************************/
 
@@ -414,7 +480,9 @@ CR3寄存器 的内容是对应页目录表的物理基地址；页目录表可�
 段页式映射: 在 proj2 中, 在段地址映射 的基础上 进一步引入了 页地址映射,形成了组合式的段页式地址映射. 更灵活,更复杂.    为了建立正确的地址建立正确的地址映射关系, ld 静态链接器 生成了 kernel ELF 执行代码的 virtual addr, 而 bootloader 与 kernel ELF 协同工作, 通过在 runtime 时对地址映射一系统"变换", 从计算机加电, 启动段式管理机制----> 启动段页式管理机制. 在段页式管理机制下运行这整个过程中, virtual addr 到 physical addr 的映射产生了多次变化, 实现了最终的 段页式映射关系 :
 
                 virtual addr = linear addr = physical addr + 0xC000 0000
-        
+
+/****************************************************************************/
+  
 这个过程是如何一步一步的实现的呢？
 
 观察 link script  -> kernel.ld  文件在 proj1 与 proj2 的区别.
@@ -423,38 +491,97 @@ proj1 ===>  kernel ELF link addr = 0x10 0000,这个地址是 virtual addr. 由�
 
 总结：  virtual addr = linear addr = physical addr
 
+/****************************************************************************/
 
 proj2 ===>  kernel ELF link addr = 0xC010 0000,这个地址也是 virtual addr.  不同的是 kernel 的入口函数变为了 kern_enty .这里差异非常大.   proj1 和 proj2 bootloader 将 kernel ELF 都放在了起始 physical addr=0x10 0000 的物理内存空间. 这实际说明了 kernel ELF 在 proj1 和 proj2 采用了不同的地址映射.
    
      proj2 不同的阶段使用了不同的 virtual addr / linear addr /physical addr 之间的映射关系.
 
       stage 1 ==> bootloader stage, 从 bootloader 的 start 函数到执行 kernel ELF 的 
-                  kern_enty 函数之前,  这个阶段的 virtual addr / linear addr /physical addr 之
-                  间的映射关系  与 proj1 相同.
+                  kern_enty 函数之前 (kernel ELF 还未加载),  这个阶段的 
+                  virtual addr / linear addr /physical addr 之间的映射关系与 proj1 相同.
+                  
 
-                virtual addr = linear addr = physical addr
+                  virtual addr = linear addr = physical addr
 
+/****************************************************************************/
 
-      stage 2 ==> 从 kern_enty 函数开始,到执行 enable_page(mm/pmm.c) 函数之前再次更新了段映射, 还
-                  没有启动页映射机制.  由于 gcc 编译出的虚拟起始地址从 0xC010 0000 开始, kernel ELF 被 bootloader 放置在从 physical addr=0x10 0000 处开始的物理内存中. 所以当 kern_enty 函数完成新的段映射关系后, 且 kernel 在没有建立好 页映射机制之前, CPU 按
-                  照 kernel 中的 virtual addr 执行, 能够被分段机制映射到正确的 physical addr 上,
-                  确保 kernel 运行正确. 
+      stage 2 ==> 从 kern_enty 函数开始,到执行 enable_page(mm/pmm.c) 函数之前再次更新了
+                  段映射, 还没有启动页映射机制.  
+                  
+                  bootmain.c 中的 boot_main() 被调用时还处于第一阶段.由于 gcc 编译出的虚拟起始地址从 0xC010 0000 开始 (kernel.ld), kernel ELF 被 bootloader 放置在从 physical addr=0x10 0000 处开始的物理内存中 (Higher Half Kernel).   
+                  
+                  由于此时系统还只是采用段式映射，如果我们还是使用 stage 1 的映射关系的话,我们根本不能访问到正确的内存空间，比如要访问虚拟地址 0xC0100000， 其物理地址应该在 0x00100000，而在这种映射下， 我们却访问了 0xC0100000 的物理地址. 因此， 为了让 虚拟地址 和 物理地址能匹配，我们必须要重新设计 GDT.
 
-        
+                #define REALLOC(x) (x - KERN_BASE)
+
+                __GDT:
+                    SEG_NULLASM 
+                    SEG_ASM(STA_X | STA_R, - KERN_BASE, 0xffffFFFF)  # code segment
+                    SEG_ASM(STA_W, - KERN_BASE, 0xFFFFffff)  # data segment
+                __GDT_DESC:
+                    .word 0x17    # sizeof(__GDT) - 1
+                    .long REALLOC(__GDT)
+
+                可以看到，此时段的起始地址由0变成了-KERNBASE。因此
                 这个阶段的 virtual addr / linear addr /physical addr 之间的映射关系
 
                 virtual addr -  0xC000 0000 = linear addr = physical addr 
                 
-                此时 CPU 在寻址时还是只采用了分段机制. 最后使能 分页映射机制 (mm/pmm.c) enable_page 函数. 一旦执行完毕 enable_page 函数中的加载 cr0 指令(指令让 CPU 使能分页机制), 则接下来的内存访问是基于 段页式的映射关系了.
+                这里需要注意两个地方:
+                第一，lgdt载入的是线性地址，所以用 .long REALLOC(__gdt)
+                将 GDT 的虚拟地址转换成了线性地址;
+                
+                第二，因为在载入 GDT 前，映射关系还是 stage 1 的映射关系;
 
-      stage 3 ==> 从 enable_page 函数开始,到执行 gdt_init 函数之前,启动了 页映射机制, 但没有第三次更
-                  新段映射.这时的 virtual addr / linear addr /physical addr 之间的映射关系很微
-                  妙：
-                   # linear addr 在  0  ~~ 4 MB 之外的 三者映射关系
-                  virtual addr -  0xC000 0000 = linear addr = physical addr + 0xC000 0000
- 
-                  # linear addr 在  0  ~~ 4 MB 之内的 三者映射关系
-                  virtual addr -  0xC000 0000 = linear addr = physical addr 
+                所以当 kern_enty 函数完成新的段映射关系后, 且 kernel 在没有建
+                立好 页映射机制之前, CPU 按照 kernel 中的 virtual addr 执行, 能够被分段机
+                制映射到正确的 physical addr 上,确保 kernel 运行正确. 
+/****************************************************************************/
+
+                此时 CPU 在寻址时还是只采用了 分段机制. 最后使能 分页映射机制 (mm/pmm.c) 
+                enable_page 函数. 一旦执行完毕 enable_page 函数中的加载 cr0 指令(指令让 
+                CPU 使能分页机制), 则接下来的内存访问是基于 段页式的映射关系了.
+/****************************************************************************/
+
+    stage 3 ==> 从 enable_page 函数开始,到执行 gdt_init 函数之前,启动了 页映射机制, 但没有
+                第三次更新段映射.这时的 virtual addr / linear addr /physical addr 之间
+                的映射关系很微妙：
+
+
+                并且在 boot_map_segment() 中将 线性地址 la 按照如下规则进行映射：
+                
+                linear addr - 0xC0000000 = phy addr
+
+                这就导致此时虚拟地址，线性地址和物理地址之间的关系如下：
+
+                virtual addr -  0xC000 0000 = linear addr = physical addr + 0xC000 0000
+
+                这肯定是错误的，因为我们根本不能通过 虚拟地址 获取正确的 物理地址， 我们可以继续用之前例子。  我们还是要访问 vir addr 0xC0100000， 则其 la 就是 0x00100000 ，然后通过页映射后的 phy addr 是 A = (0x00100000 - 0xC000 0000) 我们本来是要访问 0x00100000，却访问了 A， 因此我们需要想办法来解决这个问题，即要让映射还是：
+                
+                virt addr - 0xC0000000 = linear addr = phy addr
+
+                这个和 stage 1 到 stage 2 的转变类似，都是需要调整映射关系。为了解决这个问题,使用了
+                一个小技巧：在boot_map_segment()中， 线性地址 0xC000 0000-0xC040 0000(4MB)对应的物理地址是 0x0~0x0040 0000(4MB)。如果我们还想使用虚拟地址 0xC000 0000 来映射物理地址 0x0， 也就是线性地址 0x0 来映射物理地址 0x0，我们可以这么做：
+
+                在开启页映射机制前， 将页目录表 PDT 中的第 0 项和 第 PDX(KERNBASE) = 768 项设置为
+                相同的映射(boot_pgdir[0] = boot_pgdir[PDX(KERNBASE)])，这样，当虚拟地址是
+                0xC000 0000时， 其对应的线性地址就是 0x0， 然后通过页表 PT 可以知道其物理地址也是0x0。
+
+                举个例子，比如 enable_paging()后应该运行 gdt_init()，gdt_init()的虚拟地址是
+                0xC010 38CC，那么其对应的线性地址就是 0x0010 38CC，它将映射到页目录表 PDT 的第 1
+                项 PDE。    并且这个线性地址 和 0xC010 38CC 最终是指向同一个物理页，它们对应的物理地址是 0x0010 38CC。而根据 gdt_init()的虚拟地址和链接地址可知，gdt_init()的物理地址就是 0x0010 33CC，因此通过这种地址变换后，我们可以正确的取到之后的指令。
+                
+                最终 stage 3 分两个部分 映射关系
+
+                为什么是 4MB ？
+                因为我们把 boot_pgdir[0] 也就是 PDT 的 第一个 PDE （1024 个 PT）给重新设置了。1024 个 PT 能描述 1024 * 4B = 4MB 内存。
+
+                # linear addr 在  0  ~~ 4 MB 之外的 三者映射关系
+                virtual addr -  0xC000 0000 = linear addr = physical addr + 0xC000 0000
+
+                # linear addr 在  0  ~~ 4 MB 之内的 三者映射关系
+                virtual addr -  0xC000 0000 = linear addr = physical addr 
 
 
     //temporary map:
@@ -464,25 +591,114 @@ proj2 ===>  kernel ELF link addr = 0xC010 0000,这个地址也是 virtual addr. 
     用来建立物理地址 在 0 ~ 4MB 之内的临时映射关系
                   virtual addr -  0xC000 0000 = linear addr = physical addr 
 
-      
-      stage 4 ==> 从 gdt_init 函数开始,第三次更新了段映射,形成了新的段页式映射机制,并且取消了 
-                  stage 3 生成的临时 页映射关系.  
-                   执行下列代码, 把 boot_pgdir[0] 的第一个页目录表项(PTE 0~4MB) 清零来取消临时
-                   的 页映射关系   
+  /****************************************************************************/
+    
+      stage 4 ==> 从 gdt_init 函数开始,第三次更新了段映射(重新设置 GDT),形成了新的段页式映射机
+                  制,并且取消了 stage 3 生成的临时 页映射关系. 新的GDT又将段的起始地址变为了0.
+                    
+                  执行下列代码, 把 boot_pgdir[0] 的第一个页目录表项(PTE 0~4MB) 清零来取消临
+                  时的 页映射关系   
                    //disable the map of virtual_addr 0~4M
                    boot_pgdir[0] = 0;
 
-                  这时就是最终期望的 virtual addr / linear addr /physical addr 之间的映射关系
+                  这时就是最终期望的 virtual addr / linear addr /physical addr 之间的映射
+                  关系
+                
                   virtual addr = linear addr = physical addr + 0xC000 0000
 
 
 /****************************************************************************/
 
+## 自映射
+
+在这个 proj2 中，为了方便快速地访问页目录项 PDE 和 页表项 PTE，用了一个小技巧 --> 也就是自映射。
+
+如果用常规方法的话，要访问一个页表项 PTE，必须
+
+1 ==>  先使用 虚拟地址 访问到对应的 PDX(la) 页目录项 PDE;
+2 ==>  然后通过其中的页表地址(物理地址), 再转回成对应的 页表 虚拟地址;
+3 ==>  然后访问 页表的虚拟地址, 搜索整个 PTX(la) 页表的每个 PTE 
+
+这个过程是比较繁琐的，为了方便的访问这些表项，我们使用了自映射。
+
+我们下面通过代码来看看什么是自映射以及如何使用自映射来快速查找表项的内容。
+
+/****************************************************************************/
+
+### 自映射的实现
+
+首先，我们将页 Page 一个目录项 PDE 的值设置为 页目录表 PDT 的物理地址，这么做的作用就是当我们使用的虚拟地址，高 10 位为 (1111 1010 11) 时，它对应的页表 PT 就是页目录表 PDT，这也就实现了自映射：
+
+/* VPT = 0xFAC0 0000 = 1111 1010 11 | 00 0000 0000 | 0000 0000 0000 
+注意，这个地址是在 kernel 有效地址之外的地址(有效地址从 0xC000 0000 ~ 0xF800 0000) */
+boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;
+当执行上述语句时,就确保了 VPD 变量的值 就是 PDT 的起始虚拟地址, 并且 vpt 是 PDT 中的第一个 PDE
+指向的 PT 的起始虚拟地址。
+
+这样之后，我们来看看如何使用这种自映射。我们还定义了一个地址 VPD：
+
+
+VPD = 0xFAFE B000 = 1111 1010 11 | 11 1110 1011 | 0000 0000 0000 
+
+
+/****************************************************************************/
+
+通过 VPD 和 VPT，我们就能方便的访问页目录项 PDE 和页表项 PTE 了。下面给一个例子说明如何获取0xF800 0000 所在的 页目录项 PDE 和 页表项 PTE:
+
+首先，我们思考下直接通过 VPD = (1111 1010 11 | 11 1110 1011 | 0000 0000 0000 ) 这个地址我们
+能访问到什么？
+
+在页目录表 PDT 中通过 高 10 bit (1111 1010 11) 可以找到 boot_pgdir[PDX(VPT)] 这项 PDE，这项又直接指回了 boot_pgdir, 此时我们将页目录表 PDT 当成了页表 PT 。
+
+我们此时再用 中间 10 bit (11 1110 1011)，还是找到 boot_pgdir[PDX(VPT)] 这项 PTE ，它还是指回boot_pgdir。
+
+也就是说，VPD 这个地址最终就是指回了页目录表 PDT ，并且我们可以通过它的 低 12 bit 来访问页目录表 PDT 。
+
+0xF800 0000 地址对应的 页目录项 PDE 是 (1111 1000 00) ，我们只要将这个值放在 VPD 的 低 12bit 就行了。
+
+也就是说我们通过 VPD + 0xF800 0000 >> 22 就可以获得 0xF800 0000 对应的 页目录项 PDE.
+
+如果懂了如何获取页目录项 PDE ，再来看如何获取页表项 PTE 就很简单了。
+
+首先，我们根据 VPT 可以访问到 页目录表 PDT ，这个页目录表 PDT 同样也是 VPT 对应的页表 PT，通过VPT 的 低 22 bit 我们就可以像访问 页表 PT 一样的访问 页目录表 PDT。
+
+/****************************************************************************/
+??????????????
+0xF800 0000 的高 20 bit 是 (1111 1000 00|00 0000 0000)，用这个地址我们就可以通过 页目录表 
+PDT 找到它对应的 页表项 PTE 了。这里我觉得指导书上说的不对，如果要能访问一个非 4MB 对齐的地址，
+不能直接使用 VPT + addr >> 12  而要用 VPT + [addr_31_22 : 00 : addr_21_12];  
+
+比如一个高 20 bit 地址是 (1111 1000 11|00 0000 0011)，那么要用在 VPT 中，(1111 1000 11)要放在 VPT 的 21_12 bit ，用于找到 页目录表项 PDE ，从而找到页表 PT，剩下的 (00 0000 0011)就要用来在页表 PT 中找页表项 PTE 。      因为 VPT 中的 低 22 bit 为 0，如果直接使用 addr >> 22 的话，那么 (1111 1000 11|00 0000 0011) 就变成了 (0011 1110 00| 1100 0000 0011)，这样的话，用于查找页目录项 PDE 和 页表项 PTE 的索引就不对了，所以我觉得应该是我说的那种转换方法。也即是 (1111 1000 11|00 0000 0011) 变成了 (1111 1000 11|0000 0000 0011)，这样才和之前的是对应的。 如果要访问的地址是 4MB 对齐的，那么就可以直接用 VPT + addr >> 12了。
+
+/****************************************************************************/
 
 
 
+pte_t * const vpt = (pte_t *)VPT;
+// vpd 的值就是 PDT 的起始 virtual addr 0xFAFEB000 (高10bit = 中10bit = 1003),确保vpt 是PDT 中
+// 第一个 PDE 指向的 PT 的起始 virtual addr. 此时描述 kernel 虚拟空间的 PDT 的virtual addr 
+//  = 0xFAFEB000, 大小=4kb. PT 的理论连续 virtual addr 空间为 0xFAC00000 ~ 0xFB000000,大小为 4MB  （一个 PDE 存储了 1024 个 PT , 虚拟地址 0xFAFEB000 存储着 PDT , 第一个 PDE 的第一个 PT 在虚拟地址为 0xFAC00000 处 ; 第二个 PT 在虚拟地址 0xFAC00000 + 4B 处; 最后一个 PT 在虚拟地址 0xFB000000处 ） 一个 PT 4K , 1024 个 PT = 1024 * 4K = 4MB。
+
+//理论上可以有 1024 个 PDT, 1024 * 1024 = 1M 个 PTE, 即可映射 1024*4MB=4GB 的地址空间 (实际上不会用完这么多页).
+pde_t * const vpd = (pde_t *)PG_ADDR(PDX(VPT), PDX(VPT), 0);
 
 
+在 memlayout.h 中定义了  
+#define KERN_BASE            0xC0000000  //
+#define KMEMSIZE       		 0x38000000  // 0x380 = 896 MB the maximum amount of physical memory  
+#define KERN_TOP             (KERN_BASE + KMEMSIZE) 
+
+os kernel 只支持 896MB 的物理内存空间, 这个 896MB 只是一个设定,可以根据情况改变. 
+则最大的 kernel virtual addr = 0xF8000000
+
+
+所以最大内核虚地址 KERN_TOP 的 PDE 的虚拟地址为
+
+vpd + 0xF800 0000/ 0x40 0000 * 4 = 0xFAFE B000 + 0x3E0 * 4 = 0xFAFE BF80
+
+所以最大内核虚地址 KERN_TOP 的 PTE 的虚拟地址为
+
+vpt + 0xF800 0000/ 0x40 0000 * 4 = 0xFAC0 0000 + 0xF8000 * 4 = 0xFAFE 0000
 
 /****************************************************************************/
 

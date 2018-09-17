@@ -69,8 +69,9 @@ const struct pmm_manager *pmm_manager;
 pte_t * const vpt = (pte_t *)VPT;
 // vpd 的值就是 PDT 的起始 virtual addr 0xFAFEB000 (高10bit = 中10bit = 1003),确保vpt 是PDT 中
 // 第一个 PDE 指向的 PT 的起始 virtual addr. 此时描述 kernel 虚拟空间的 PDT 的virtual addr 
-//  = 0xFAFEB000, 大小=4kb. PT 的理论连续 virtual addr 空间为 0xFAC00000 ~ 0xFB000000,大小为4MB
-// 可以有 1M 个 PTE, 即可映射 4GB 的地址空间 (实际上不会用完这么多页).
+//  = 0xFAFEB000, 大小=4kb. PT 的理论连续 virtual addr 空间为 0xFAC00000 ~ 0xFB000000,大小为 4MB  （一个 PDE 存储了 1024 个 PT , 虚拟地址 0xFAFEB000 存储着 PDT , 第一个 PDE 的第一个 PT 在虚拟地址为 0xFAC00000 处 ; 第二个 PT 在虚拟地址 0xFAC00000 + 4B 处; 最后一个 PT 在虚拟地址 0xFB000000处 ） 一个 PT 4K , 1024 个 PT = 1024 * 4K = 4MB。
+
+//理论上可以有 1024 个 PDT, 1024 * 1024 = 1M 个 PTE, 即可映射 1024*4MB=4GB 的地址空间 (实际上不会用完这么多页).
 pde_t * const vpd = (pde_t *)PG_ADDR(PDX(VPT), PDX(VPT), 0);
 /* *
  * Global Descriptor Table:
@@ -344,29 +345,38 @@ boot_alloc_page(void)
 pte_t *
 get_pte(pde_t *pgdir, uintptr_t la, bool create)
 {
-    // (1) find page directory entry 尝试获取页表 
-    pde_t *pdep = &pgdir[PDX(la)]; 
-    // (2) check if entry is not present 若获取不成功则申请一页;
+    // (1) find page directory entry | get PDE
+    pde_t *pdep = &pgdir[PDX(la)];  
+    // (2) check if entry is not present 
     if (!(*pdep & PTE_P)) {  
         struct Page *page;
         // (3) check if creating is needed, then alloc page for page table
-        //如果create参数为0,则get_pte返回NULL;如果create参数不为0,则get_pte需要申请一个新的物理页（通过alloc_page来实现
         if (!create || (page = alloc_page()) == NULL) {
             return NULL;
         }
-        // (4) set page reference 引用次数需要加1 
+        // (4) set page reference 
         set_page_ref(page, 1);
-        // (5) get linear address of page 获取页的线性地址 
+        // (5) get linear address of page  
         uintptr_t pa = page2pa(page);
-        // (6) clear page content using memset 新申请的 page 清 0
+        // (6) clear page content using memset 0
         memset(KADDR(pa), 0, PAGE_SIZE); 
-        // (7) set page directory entry's permission 设置权限  
+        // (7) set page directory entry's (set PDE's perm) permission   
         *pdep = pa | PTE_U | PTE_W | PTE_P;
+        /*
+        create pde idx:[768]:[001ba007] [001ba000]
+        create pde idx:[769]:[001bb007] [001bb000]
+        .....
+        create pde idx:[990]:[00298007] [00298000]
+        create pde idx:[991]:[00299007] [00299000]
+        */
+        // cprintf("create pde idx:[%d]:[%08lx] [%08lx]\n",PDX(la),*pdep,pa);
     }
+    cprintf("create pde idx:[%d]:[%08lx]\n",PDX(la),*pdep);
 
-    // cprintf("pte idx =>%d Phy PDE_ADDR ==>[%08lx] Vir PDE_ADDR ==>[%08lx]\n\t Phy PTE_ADDR ==>[%08lx] Vir PTE_addr ==>[%08lx] la ==>[%08lx]  pgdir==>[%08lx]\n",PTX(la),PDE_ADDR(*pdep),KADDR(PDE_ADDR(*pdep)),&((pte_t *)(PDE_ADDR(*pdep)))[PTX(la)],&((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)],la, pgdir);
+    // cprintf("***********************************\n");
+    // cprintf("pte idx:[%d]\n\tPhy PDE_ADDR:[%08lx]\n\tVir PDE_ADDR:[%08lx]\n\tPhy PTE_ADDR:[%08lx]\n\tVir PTE_addr:[%08lx]\n\tla:[%08lx]\n\tpgdir:[%08lx]\n",PTX(la),PDE_ADDR(*pdep),KADDR(PDE_ADDR(*pdep)),&((pte_t *)(PDE_ADDR(*pdep)))[PTX(la)],&((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)],la, pgdir);
 
-    // (8) return page table entry 返回页表 virtual addr 
+    // (8) return page table entry (virtual addr)
     return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)]; 
 }
 //get_page - get related Page struct for linear address la using PDT pgdir
@@ -526,6 +536,7 @@ enable_paging(void)
 //  size: memory size
 //  pa:   physical address of this memory
 //  perm: permission of this memory
+// 225 个 PDE
 static void
 boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, uintptr_t pa, uint32_t perm)
 {
@@ -533,13 +544,14 @@ boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, uintptr_t pa, uint32_t
     size_t n = ROUNDUP(size + PG_OFF(la), PAGE_SIZE) / PAGE_SIZE;// n => 229376
     la = ROUNDDOWN(la, PAGE_SIZE);
     pa = ROUNDDOWN(pa, PAGE_SIZE);
-    // cprintf("page frame nums =>%d la ==>[%08lx] pa ==>[%08lx] pgdir==>[%08lx]\n",n,la, pa,pgdir);
+    cprintf("need map [%d] page frame, pgdir:[0x%08lx] la:[0x%08lx] pa:[0x%08lx]  \n",n,pgdir,la,pa);
 
     for (; n > 0; n --, la += PAGE_SIZE, pa += PAGE_SIZE) {
         pte_t *ptep = get_pte(pgdir, la, 1);
         assert(ptep != NULL);
         *ptep = pa | PTE_P | perm;
     }
+
 }
 
 static void
@@ -582,6 +594,8 @@ check_boot_pgdir(void)
 void
 pmm_init(void)
 {   
+    cprintf("virt addr VPT: [%08lx] vpd:[%08lx]",vpt,vpd);
+
     /* We need to alloc | free the physical memory (granularity is 4KB or other size).
      * So a framework of physical memory manager (struct pmm_manger) is defined in pmm.h
      * First  we  should init  a physical memory manager(pmm) based on the  framework.
@@ -596,7 +610,7 @@ pmm_init(void)
     page_init();
     // step 3--> 检查物理内存分配算法
     //use pmm->check to verify the correctness of the alloc/free function in a pmm
-    check_alloc_page();
+    // check_alloc_page();
     // step 4--> 建立一个临时二级页表 PT, 确保切换到分页机制后,代码能够正常执行.
     // create boot_pgdir, an initial page directory(Page Directory Table, PDT)
     boot_pgdir = boot_alloc_page();
@@ -606,39 +620,42 @@ pmm_init(void)
     // cprintf("boot_cr3 physical addr ==>[%08lx]\n",boot_cr3);//001b9000
     // c01b9000(virtual addr) - 001b9000(physical addr)  = 0xC0000000 stage 2 映射关系
 
-    check_pgdir();
+    // check_pgdir();
 
     static_assert(KERN_BASE % PT_SIZE == 0 && KERN_TOP % PT_SIZE == 0);
 
 
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
+    // cprintf("virt addr VPT: pde idx:[%d]  phy addr[%08lx]\n",PDX(VPT),PADDR(boot_pgdir) | PTE_P | PTE_W);
     boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;//PDX(VPT) = 1003
     // step 5--> 建立一一映射关系的二级页表
     // map all physical memory to linear memory with base linear addr KERN_BASE
-    //linear_addr KERN_BASE~KERN_BASE+KMEMSIZE = phy_addr 0~KMEMSIZE
-    //But shouldn't use this map until enable_paging() & gdt_init() finished.
+    // linear_addr KERN_BASE(0xC000 0000)~KERN_BASE+KMEMSIZE(0xF800 0000) = phy_addr 0~KMEMSIZE(0x3800 0000)
+    // But shouldn't use this map until enable_paging() & gdt_init() finished.
     boot_map_segment(boot_pgdir, KERN_BASE, KMEMSIZE, 0, PTE_W);
+    cprintf("before [0x%08lx] \n",boot_pgdir[0]);
 
     //temporary map:
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M
-    // cprintf("page directory index ==>%d \n",PDX(KERN_BASE));
-    boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768
+    cprintf("temporary map: pde idx:[%d] [%08lx]\n",PDX(KERN_BASE),boot_pgdir[PDX(KERN_BASE)]);
+    boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768 , //第 768 PDE 存储的 物理地址（PT 表的地址） 001ba007
     // step 6--> 使能分页机制
     enable_paging();
     //step 7 --> 重新设置全局段描述表 GDT
-    //reload gdt(third time,the last time) to map all physical memory
-    //virtual_addr 0~4G=liear_addr 0~4G
-    //then set kernel stack(ss:esp) in TSS, setup TSS in gdt, load TSS
+    // reload gdt(third time,the last time) to map all physical memory
+    // virtual_addr 0~4G=liear_addr 0~4G
+    // then set kernel stack(ss:esp) in TSS, setup TSS in gdt, load TSS
+    cprintf("gdt_init addr :[0x%08lx]\n",gdt_init);
     gdt_init();
     //step 8 -->取消临时二级页表
-    //disable the map of virtual_addr 0~4M
+    // disable the map of virtual_addr 0~4M (1024 * 4B =4MB)
     boot_pgdir[0] = 0;
     // step 9--> 检查页表建立是否正确
-    //now the basic virtual memory map(see memalyout.h) is established.
-    //check the correctness of the basic virtual memory map.
+    // now the basic virtual memory map(see memalyout.h) is established.
+    // check the correctness of the basic virtual memory map.
     check_boot_pgdir();
-    //step 10-->通过自映射机制完成页表的打印输出
+    // step 10-->通过自映射机制完成页表的打印输出
     print_pgdir();
 }
 

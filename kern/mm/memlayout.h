@@ -73,7 +73,7 @@
 
 #define KERN_BASE            0xC0000000  //
 #define KMEMSIZE       		 0x38000000  // 0x380 = 896 MB the maximum amount of physical memory  , os kernel 只支持 896MB 的物理内存空间, 这个 896MB 只是一个设定,可以根据情况改变. 
-#define KERN_TOP             (KERN_BASE + KMEMSIZE) //最大的 kernel virtual addr = 0xf8000000
+#define KERN_TOP             (KERN_BASE + KMEMSIZE) //最大的 kernel virtual addr = 0xF8000000
 
 
 

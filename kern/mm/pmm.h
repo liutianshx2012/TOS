@@ -97,7 +97,7 @@ page2ppn(struct Page *page)
 {
     return page - pages;
 }
-// linear addr
+// page -> linear addr
 static inline uintptr_t
 page2pa(struct Page *page) 
 {
