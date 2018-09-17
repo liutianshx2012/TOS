@@ -13,7 +13,8 @@
 #include <string.h>
 #include <assert.h>
 #include <memlayout.h>
-#include <default_pmm.h>
+// #include <default_pmm.h>
+#include <buddy_system_pmm.h>
 #include <pmm.h>
 /* *
  * 全局 任务状态段ts
@@ -154,7 +155,8 @@ gdt_init(void)
 static void
 init_pmm_manager(void)
 {
-    pmm_manager = &default_pmm_manager;
+    // pmm_manager = &default_pmm_manager;
+    pmm_manager = &buddy_pmm_manager;
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
 }
@@ -371,8 +373,6 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create)
         */
         // cprintf("create pde idx:[%d]:[%08lx] [%08lx]\n",PDX(la),*pdep,pa);
     }
-    cprintf("create pde idx:[%d]:[%08lx]\n",PDX(la),*pdep);
-
     // cprintf("***********************************\n");
     // cprintf("pte idx:[%d]\n\tPhy PDE_ADDR:[%08lx]\n\tVir PDE_ADDR:[%08lx]\n\tPhy PTE_ADDR:[%08lx]\n\tVir PTE_addr:[%08lx]\n\tla:[%08lx]\n\tpgdir:[%08lx]\n",PTX(la),PDE_ADDR(*pdep),KADDR(PDE_ADDR(*pdep)),&((pte_t *)(PDE_ADDR(*pdep)))[PTX(la)],&((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)],la, pgdir);
 
@@ -594,8 +594,6 @@ check_boot_pgdir(void)
 void
 pmm_init(void)
 {   
-    cprintf("virt addr VPT: [%08lx] vpd:[%08lx]",vpt,vpd);
-
     /* We need to alloc | free the physical memory (granularity is 4KB or other size).
      * So a framework of physical memory manager (struct pmm_manger) is defined in pmm.h
      * First  we  should init  a physical memory manager(pmm) based on the  framework.
@@ -610,7 +608,7 @@ pmm_init(void)
     page_init();
     // step 3--> 检查物理内存分配算法
     //use pmm->check to verify the correctness of the alloc/free function in a pmm
-    // check_alloc_page();
+    check_alloc_page();
     // step 4--> 建立一个临时二级页表 PT, 确保切换到分页机制后,代码能够正常执行.
     // create boot_pgdir, an initial page directory(Page Directory Table, PDT)
     boot_pgdir = boot_alloc_page();
@@ -620,7 +618,7 @@ pmm_init(void)
     // cprintf("boot_cr3 physical addr ==>[%08lx]\n",boot_cr3);//001b9000
     // c01b9000(virtual addr) - 001b9000(physical addr)  = 0xC0000000 stage 2 映射关系
 
-    // check_pgdir();
+    check_pgdir();
 
     static_assert(KERN_BASE % PT_SIZE == 0 && KERN_TOP % PT_SIZE == 0);
 
@@ -634,7 +632,6 @@ pmm_init(void)
     // linear_addr KERN_BASE(0xC000 0000)~KERN_BASE+KMEMSIZE(0xF800 0000) = phy_addr 0~KMEMSIZE(0x3800 0000)
     // But shouldn't use this map until enable_paging() & gdt_init() finished.
     boot_map_segment(boot_pgdir, KERN_BASE, KMEMSIZE, 0, PTE_W);
-    cprintf("before [0x%08lx] \n",boot_pgdir[0]);
 
     //temporary map:
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M

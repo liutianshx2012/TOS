@@ -28,6 +28,7 @@ struct pmm_manager
     void (*free_pages)(struct Page *base, size_t n);  // free >=n pages with "base" addr of Page descriptor structures(memlayout.h)
     size_t (*nr_free_pages)(void);                    // return the number of free pages
     void (*check)(void);                              // check the correctness of XXX_pmm_manager
+    void (*showpage)(void);
 };
 
 extern const struct pmm_manager *pmm_manager;
