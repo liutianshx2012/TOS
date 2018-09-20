@@ -1,6 +1,7 @@
 #include <pmm.h>
 #include <list.h>
 #include <string.h>
+#include <buddy_system_pmm.h>
 
 #define LEFT_LEAF(index) ((index) * 2 + 1)
 #define RIGHT_LEAF(index) ((index) * 2 + 2)
@@ -30,7 +31,7 @@ struct Page * treebase;
 // total 是对size进行修正后的二叉树的size大小
 unsigned total;
 
-// 如果size不是2的幂次，进行修正
+// 如果size不是2的幂次,进行修正
 static unsigned 
 fixsize(unsigned size) 
 {
@@ -48,7 +49,7 @@ buddy_init(void)
     nr_free = 0;
 }
 
-//递归建树 ，对节点进行初始化
+//递归建树 ,对节点进行初始化
 void
 init_tree(int root, int l, int r, struct Page *p)
 {
@@ -64,14 +65,13 @@ init_tree(int root, int l, int r, struct Page *p)
 	init_tree(RIGHT_LEAF(root),mid+1,r,p+(r-l+1)/2);	
 }
 
-// 对树进行修正，以为有一些空间是不能被分配的
+// 对树进行修正,因为有一些空间是不能被分配的
 void 
 fixtree(int index,int n)
 {
 	int l = bu[index].left;
 	int r = bu[index].right;
 	//cprintf("l:%d,r:%d,log:%d\n",l,r,bu[index].longest);
-	// int mid = (l+r)>>1;
 	if (r < n) {
         return;
     }
@@ -85,7 +85,7 @@ fixtree(int index,int n)
 	bu[index].longest = MAX(bu[LEFT_LEAF(index)].longest,bu[RIGHT_LEAF(index)].longest);
 }
 
-// 传入size ，这个size不一定是2的幂次，进行修正以后建二叉树，再对页进行初始化
+// 传入size ,这个size不一定是2的幂次,进行修正以后建二叉树,再对页进行初始化
 static void
 buddy_init_memmap(struct Page *base, size_t n) 
 {
@@ -138,7 +138,7 @@ showpage(void)
 	cprintf("------------------\n\n");
 }
 
-// 通过递归 找到size大小的空闲区间，返回地址； 被alloc函数调用
+// 通过递归 找到size大小的空闲区间,返回地址; 被alloc函数调用
 struct Page * 
 search(int index,int size)
 {
@@ -183,7 +183,7 @@ buddy_alloc_pages(size_t n)
 	return start;    
 }
 
-// 通过递归，查找相应位置，释放空间  free_pages函数调用
+// 通过递归,查找相应位置,释放空间  free_pages函数调用
 void 
 freetree(int index, int pos, int size)
 {

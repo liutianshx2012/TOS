@@ -70,7 +70,7 @@ const struct pmm_manager *pmm_manager;
 pte_t * const vpt = (pte_t *)VPT;
 // vpd 的值就是 PDT 的起始 virtual addr 0xFAFEB000 (高10bit = 中10bit = 1003),确保vpt 是PDT 中
 // 第一个 PDE 指向的 PT 的起始 virtual addr. 此时描述 kernel 虚拟空间的 PDT 的virtual addr 
-//  = 0xFAFEB000, 大小=4kb. PT 的理论连续 virtual addr 空间为 0xFAC00000 ~ 0xFB000000,大小为 4MB  （一个 PDE 存储了 1024 个 PT , 虚拟地址 0xFAFEB000 存储着 PDT , 第一个 PDE 的第一个 PT 在虚拟地址为 0xFAC00000 处 ; 第二个 PT 在虚拟地址 0xFAC00000 + 4B 处; 最后一个 PT 在虚拟地址 0xFB000000处 ） 一个 PT 4K , 1024 个 PT = 1024 * 4K = 4MB。
+//  = 0xFAFEB000, 大小=4kb. PT 的理论连续 virtual addr 空间为 0xFAC00000 ~ 0xFB000000,大小为 4MB  (一个 PDE 存储了 1024 个 PT , 虚拟地址 0xFAFEB000 存储着 PDT , 第一个 PDE 的第一个 PT 在虚拟地址为 0xFAC00000 处 ; 第二个 PT 在虚拟地址 0xFAC00000 + 4B 处; 最后一个 PT 在虚拟地址 0xFB000000处 ) 一个 PT 4K , 1024 个 PT = 1024 * 4K = 4MB.
 
 //理论上可以有 1024 个 PDT, 1024 * 1024 = 1M 个 PTE, 即可映射 1024*4MB=4GB 的地址空间 (实际上不会用完这么多页).
 pde_t * const vpd = (pde_t *)PG_ADDR(PDX(VPT), PDX(VPT), 0);
@@ -636,7 +636,7 @@ pmm_init(void)
     //temporary map:
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M
     cprintf("temporary map: pde idx:[%d] [%08lx]\n",PDX(KERN_BASE),boot_pgdir[PDX(KERN_BASE)]);
-    boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768 , //第 768 PDE 存储的 物理地址（PT 表的地址） 001ba007
+    boot_pgdir[0] = boot_pgdir[PDX(KERN_BASE)]; //PDX(KERN_BASE) = 768 , //第 768 PDE 存储的 物理地址(PT 表的地址) 001ba007
     // step 6--> 使能分页机制
     enable_paging();
     //step 7 --> 重新设置全局段描述表 GDT

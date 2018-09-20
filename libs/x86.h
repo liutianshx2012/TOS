@@ -327,7 +327,7 @@ rcr3(void)
 
     return cr3;
 }
-/* 把 addr 读入到寄存器中, %0 指向所在的寄存器,  invlpg m指令 ==>使包含 m 的页对应的 “TLB entry” 失效 */
+/* 把 addr 读入到寄存器中, %0 指向所在的寄存器,  invlpg m指令 ==>使包含 m 的页对应的 "TLB entry” 失效 */
 static inline void
 invlpg(void *addr)
 {

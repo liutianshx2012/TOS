@@ -113,7 +113,7 @@ default_free_pages(struct Page *base, size_t n)
         }
     }
     //list_add_before(le, base->page_link);
-    //向le之前插入n个页（空闲）,并设置标志位
+    //向le之前插入n个页(空闲),并设置标志位
     for(p=base; p<base+n; p++) {
         list_add_before(le, &(p->page_link));
     }

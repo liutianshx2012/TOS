@@ -24,7 +24,7 @@ SECTIONS {
                     physical addr. 
                     
                     简而言之: kernel 的 link addr 在 kernel.ld 中设置好了, 是一个 
-                    vitural addr； kernel 的 load addr 在 bootloader 中的 bootmain 函
+                    vitural addr; kernel 的 load addr 在 bootloader 中的 bootmain 函
                     数中指定,是一个 physical addr.
 
                     总结: kernel link addr == kernel virtual addr
